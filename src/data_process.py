@@ -110,7 +110,7 @@ def create_df(df, window=3):
     # get bollinger value
     bb_width = get_bollinger_bands(df['Adj Close'], window)
     # get the ratio of close price to simple moving average
-    close_sma_ratio = get_adj_close_sma_ratio(df['Close'], window)
+    close_sma_ratio = get_adj_close_sma_ratio(df['Adj Close'], window)
 
     # create bb-width, close-sma-ratio columns
     df['bb_width'] = bb_width
