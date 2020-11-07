@@ -13,7 +13,7 @@ import data_process as d
 import pandas_datareader.data as web # fetch stock data
 import seaborn as sns
 
-get_ipython().magic('matplotlib inline')
+# get_ipython().magic('matplotlib inline')
 
 
 # ### Q table initialization
@@ -310,21 +310,21 @@ train_df = d.create_df(train_df, 3)
 
 
 # get_states = States Dictionary after discretizing by converting continuous values to integer state
-price_states_value, bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
+bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
 
 
 # In[19]:
 
 
 # Create_state_df =  Add state information to the DF
-train_df = d.create_state_df(train_df, price_states_value, bb_states_value, close_sma_ratio_states_value)
+train_df = d.create_state_df(train_df, bb_states_value, close_sma_ratio_states_value)
 
 
 # In[20]:
 
 
 # Return a list of strings representing the combination of all the states
-all_states = d.get_all_states(price_states_value, bb_states_value, close_sma_ratio_states_value)
+all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
 states_size = len(all_states)
 
 
@@ -334,7 +334,7 @@ states_size = len(all_states)
 
 
 test_df = d.create_df(test_df, 3)
-test_df = d.create_state_df(test_df, price_states_value, bb_states_value, close_sma_ratio_states_value)
+test_df = d.create_state_df(test_df, bb_states_value, close_sma_ratio_states_value)
 
 
 # ##### (Optional) Visualizing the processed raw input data
@@ -387,18 +387,18 @@ def trainqlearner(start_date, end_date, ticker):
     train_df = d.create_df(train_df, 3)
     
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
-    price_states_value, bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
+    bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
     
     # Create_state_df =  Add state information to the DF
-    train_df = d.create_state_df(train_df, price_states_value, bb_states_value, close_sma_ratio_states_value)
+    train_df = d.create_state_df(train_df, bb_states_value, close_sma_ratio_states_value)
     
     # Return a list of strings representing the combination of all the states
-    all_states = d.get_all_states(price_states_value, bb_states_value, close_sma_ratio_states_value)
+    all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
     states_size = len(all_states)
     
     # Test Data
     test_df = d.create_df(test_df, 3)
-    test_df = d.create_state_df(test_df, price_states_value, bb_states_value, close_sma_ratio_states_value)
+    test_df = d.create_state_df(test_df, bb_states_value, close_sma_ratio_states_value)
     
     # Preparation of the Q Table
     q_init = initialize_q_mat(all_states, all_actions)/1e9
