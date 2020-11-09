@@ -174,7 +174,7 @@ def hold(stock_table,money,inc,original_shares):
     # add original cash to this
     final_vals += money
     
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
     return results
 
 
@@ -261,7 +261,7 @@ def random_action(stock_table,money,inc,original_shares):
         
     actions = pd.Series(actions,index=stock_table.index)
     
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history':None}
     return results
 
 
@@ -356,7 +356,7 @@ def rule_based(stock_table,money,inc, original_shares):
         
     actions = pd.Series(actions,index=stock_table.index)
     
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
     return results
 
 
@@ -461,7 +461,7 @@ def ols(stock_table,money,inc, original_shares):
         
     actions = pd.Series(actions,index=stock_table.index)
     
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
     return results
 
 # define and train qlearner - for now this offers dummy output
@@ -528,7 +528,9 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
     # calculate daily portfolio value
     final_vals = stock_table.copy()
     final_vals.iloc[0] = original_val
-    
+
+    state_history = {}
+
     # iterate through days
     for i in range(1,stock_table.shape[0]):
         j = i-1 # last day
@@ -567,7 +569,13 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
 #             print("STATE: ", state, str(bbq), str(smq))
 #             print(qtable.loc[state])
             cur_act = qtable.loc[state].idxmax()
-            
+
+            #maintain a score of state visited
+            if state_history.get(state, None) is None:
+                state_history[state] = 0
+            else:
+                state_history[state]+=1
+
         else: # if we're too early to have a full lookback window
             cur_act = 'HOLD'
     
@@ -601,8 +609,8 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
         actions += [act]
         
     actions = pd.Series(actions,index=stock_table.index)
-   
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable}
+
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history)}
     return results
 
 # function to return stats and graphs
@@ -721,8 +729,13 @@ def return_stats(stock='jpm',
     # plot daily portfolio values
     for i, policy in enumerate(policies):
         dic = results[policy.__name__]
+
+        print("States History for " + policy.__name__ + "is: ", dic['state_history'])
+
+        del dic['state_history']
         del dic['qtable']
         df = pd.DataFrame(dic)
+
         plt.figure(figsize=(14,8))
         plt.plot([], label="BUY", color="orange", marker='o')  
         plt.plot([], label="SELL", color="black",marker='o')

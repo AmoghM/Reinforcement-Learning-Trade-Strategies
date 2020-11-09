@@ -130,14 +130,14 @@ def get_states(df):
     norm_adj_close, norm_close_sma_ratio columns
     '''
     # discretize values
-    price_states_value = discretize(df['norm_adj_close'])
+    # price_states_value = discretize(df['norm_adj_close'])
     bb_states_value = discretize(df['norm_bb_width'])
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
     
-    return price_states_value, bb_states_value, close_sma_ratio_states_value
+    return bb_states_value, close_sma_ratio_states_value
 
 
-def create_state_df(df, price_states_value, bb_states_value, close_sma_ratio_states_value):
+def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
     '''
     Add a new column to hold the state information to the dataframe
     Inputs:
@@ -150,13 +150,13 @@ def create_state_df(df, price_states_value, bb_states_value, close_sma_ratio_sta
     '''
     df['bb_width_state'] = df['bb_width'].apply(lambda x : value_to_state(x, bb_states_value))
     df['close_sma_ratio_state'] = df['close_sma_ratio'].apply(lambda x : value_to_state(x, close_sma_ratio_states_value))
-    df['norm_adj_close_state'] = df['norm_adj_close'].apply(lambda x : value_to_state(x, price_states_value))
-    
-    df['state'] = df['norm_adj_close_state'] + df['close_sma_ratio_state'] + df['bb_width_state']
+    # df['norm_adj_close_state'] = df['norm_adj_close'].apply(lambda x : value_to_state(x, price_states_value))
+    # df['state'] = df['norm_adj_close_state'] + df['close_sma_ratio_state'] + df['bb_width_state']
+    df['state'] = df['close_sma_ratio_state'] + df['bb_width_state']
     df.dropna(inplace=True)
     return df
 
-def get_all_states(price_states_value, bb_states_value, close_sma_ratio_states_value):
+def get_all_states(bb_states_value, close_sma_ratio_states_value):
     '''
     Combine all the states from the discretized 
     norm_adj_close, norm_close_sma_ratio columns.
@@ -168,10 +168,11 @@ def get_all_states(price_states_value, bb_states_value, close_sma_ratio_states_v
     states(list): list of strings
     '''
     states = []
-    for p, _ in price_states_value.items():
-        for c, _ in close_sma_ratio_states_value.items():
-            for b, _ in bb_states_value.items():
-                state =  str(p) + str(c) + str(b)
-                states.append(str(state))
+    # for p, _ in price_states_value.items():
+    for c, _ in close_sma_ratio_states_value.items():
+        for b, _ in bb_states_value.items():
+            # state =  str(p) + str(c) + str(b)
+            state = str(c) + str(b)
+            states.append(str(state))
     
     return states
