@@ -4,7 +4,7 @@ import pandas as pd
 import pandas_datareader.data as web  # fetch stock data
 
 
-def get_stock_data(symbol, start, end, train_size=0.8):
+def get_stock_data(symbol, start, end):
     '''
     Get stock data in the given date range
     Inputs:
@@ -16,15 +16,7 @@ def get_stock_data(symbol, start, end, train_size=0.8):
     train_df, test_df OR df(if train_size=1)
     '''
     df = web.DataReader(symbol, 'yahoo', start, end)
-
-    train_len = int(df.shape[0] * train_size)
-
-    if train_len > 0:
-        train_df = df.iloc[:train_len, :]
-        test_df = df.iloc[train_len:, :]
-        return train_df, test_df
-    else:
-        return df
+    return df
 
 
 def get_bollinger_bands(values, window):
@@ -40,7 +32,7 @@ def get_bollinger_bands(values, window):
     rm = values.rolling(window=window).mean()
     rstd = values.rolling(window=window).std()
 
-    band_width = 2. * rstd / rm
+    band_width = rm / rstd
     return band_width.apply(lambda x: round(x, 5))
 
 
@@ -120,10 +112,10 @@ def create_df(df, window=3):
     df.dropna(inplace=True)
 
     # normalize close price
-    df['norm_adj_close'] = df['Adj Close']/df.iloc[0, :]['Adj Close']
-    df['norm_bb_width'] = df['bb_width']/df.iloc[0, :]['bb_width']
-    df['norm_close_sma_ratio'] = df['close_sma_ratio'] / \
-        df.iloc[0, :]['close_sma_ratio']
+    df['norm_adj_close'] = df['Adj Close']#/df.iloc[0, :]['Adj Close']
+    df['norm_bb_width'] = df['bb_width']#/df.iloc[0, :]['bb_width']
+    df['norm_close_sma_ratio'] = df['close_sma_ratio'] #/ \
+        #df.iloc[0, :]['close_sma_ratio']
 
     return df
 
@@ -134,14 +126,14 @@ def get_states(df):
     Input:
     df(dataframe)
     Output:
-    the discretized dictionary of norm_bb_width, 
+    the discretized dictionary of norm_bb_width,
     norm_adj_close, norm_close_sma_ratio columns
     '''
     # discretize values
     # price_states_value = discretize(df['norm_adj_close'])
     bb_states_value = discretize(df['norm_bb_width'])
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
-    
+
     return bb_states_value, close_sma_ratio_states_value
 
 def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
@@ -168,7 +160,7 @@ def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
 
 def get_all_states(bb_states_value, close_sma_ratio_states_value):
     '''
-    Combine all the states from the discretized 
+    Combine all the states from the discretized
     norm_adj_close, norm_close_sma_ratio columns.
     Inputs:
     price_states_value(dict)
