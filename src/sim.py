@@ -13,14 +13,15 @@ import trainqlearner_util as tu
 import time
 import pandas_datareader.data as web # fetch stock data
 
-#TODO: check with Ben and Mariem. Start and End date should be same for comparing the benchmark?
+#TODO: make this a single function call
+ticker = 'JPM'
+
 np.random.seed(0)
 start = '2017-01-01'
 end = '2019-12-31'
 
 start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
-ticker = 'JPM'
 
 q, bb_states_value, SMA_ratio_quantiles = tu.trainqlearner(start_date, end_date, ticker)
 q.columns = ['BUY', 'SELL', 'HOLD']
@@ -506,7 +507,6 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
             bbq = np.argwhere(np.where(BB_quantiles>bb,1,0))[0][0]
 #                 print(np.argwhere(np.where(BB_quantiles>bb,1,0)))
 
-            print(bb,BB_quantiles)
             # find current SMA value
             sma = d.get_adj_close_sma_ratio(stock_table.iloc[:i],window).iloc[j]
 
@@ -569,7 +569,7 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
 
     actions = pd.Series(actions,index=stock_table.index)
 
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history)}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history),'BB_quantiles':BB_quantiles,'SMA_quantiles':SMA_quantiles}
     return results
 
 # function to return stats and graphs
@@ -629,16 +629,16 @@ def return_stats(stock='jpm',
             qtab_bb_tmp.index = [s[0] for s in qtab.index] # get first value for each state, indicating BB
             qtab_bb = qtab_bb_tmp.groupby(qtab_bb_tmp.index).mean()
             qtab_bb = qtab_bb.iloc[::-1] # reverse order of rows for visualization purposes - now biggest value will be on top
-            #qtab_bb.index = np.flip(nq[1]) # define index as bb quantiles, reversing quantile order in kind so biggest value is first
+            qtab_bb.index = np.round(np.flip(np.array(results[policy.__name__]['BB_quantiles'])),5) # define index as bb quantiles, reversing quantile order in kind so biggest value is first
 
 
             # plot BB heatmap
             plt.figure(figsize=(9,7))
             heatmap(qtab_bb)
-            plt.title('Bollinger Bands Q-Table',size=16)
+            plt.title('Rolling T-Score (Bollinger Band Location) Q-Table',size=16)
             plt.xticks(fontsize=15)
             plt.yticks(fontsize=14)
-            # plt.show()
+            plt.show()
 
             # marginalize over SMA
             # TODO - determine if this mean was taken correctly
@@ -646,13 +646,14 @@ def return_stats(stock='jpm',
             qtab_sma_tmp.index = [s[1] for s in qtab.index] # get second value for each state, indicating SMA
             qtab_sma = qtab_sma_tmp.groupby(qtab_sma_tmp.index).mean()
             qtab_sma = qtab_sma.iloc[::-1]
+            qtab_sma.index = np.round(np.flip(np.array(results[policy.__name__]['SMA_quantiles'])),5)
 
             plt.figure(figsize=(9,7))
             heatmap(qtab_sma)
             plt.title('Simple Moving Average Q-Table',size=16)
             plt.xticks(fontsize=15)
             plt.yticks(fontsize=14)
-            # plt.show()
+            plt.show()
 
     # plot daily portfolio values
     plt.figure(figsize=(14,8))
@@ -662,7 +663,7 @@ def return_stats(stock='jpm',
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Portfolio Value ($)",fontsize=20)
     plt.title("Daily Portfolio Values For Different Trading Strategies: "+stock.upper(),fontsize=25)
-    # plt.show()
+    plt.show()
 
     # plot daily cash values
     plt.figure(figsize=(14,8))
@@ -672,7 +673,7 @@ def return_stats(stock='jpm',
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Cash Held ($)",fontsize=20)
     plt.title("Daily Cash Held For Different Trading Strategies: "+stock.upper(),fontsize=25)
-    # plt.show()
+    plt.show()
 
     # plot daily shares
     plt.figure(figsize=(14,8))
@@ -682,7 +683,7 @@ def return_stats(stock='jpm',
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Shares Held",fontsize=20)
     plt.title("Daily Share Holdings For Different Trading Strategies: "+stock_name,fontsize=25)
-    # plt.show()
+    plt.show()
 
     # plot daily portfolio values
     for i, policy in enumerate(policies):
@@ -709,7 +710,7 @@ def return_stats(stock='jpm',
         plt.ylabel("Portfolio Value ($)",fontsize=20)
         plt.title("Daily Portfolio Values For Trading Strategies of "+ policy.__name__ +" for stock : "+stock.upper(),fontsize=25)
         plt.legend()
-        # plt.show()
+        plt.show()
 
     # display percentages
     #TODO: display(res) has no display() function. Fix bug.
@@ -837,9 +838,6 @@ def return_stats(stock='jpm',
 
 if __name__ == '__main__':
 
-    # define lookback window for SMA and BB
-    window = 3
-
-    stocks = ['jpm']
-    for stock in stocks:
+    stocks = ticker
+    for stock in [stocks]:
         return_stats(stock)

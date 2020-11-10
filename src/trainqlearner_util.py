@@ -275,110 +275,14 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
 # In[12]:
 
 
-start = datetime.datetime(2014, 1, 1)
-end = datetime.datetime(2018, 1, 1)
-
-
-# Split the data into train and test data set
-
-# In[13]:
-
-
-train_df, test_df = d.get_stock_data('AAPL', start, end, 0.8)
-
-
-# Action Definition (= Q table columns)
-
-# In[16]:
-
-
-all_actions = {0:'hold', 1:'buy', 2:'sell'}
-
-
-# ##### Further formatting of the raw stock data
-
-# Train data
-
-# In[17]:
-
-
-# create_df = normalized predictors norm_bb_width, norm_adj_close, norm_close_sma_ratio
-train_df = d.create_df(train_df, 3)
-
 
 # In[18]:
 
 
-# get_states = States Dictionary after discretizing by converting continuous values to integer state
-bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
-
-
-# In[19]:
-
-
-# Create_state_df =  Add state information to the DF
-train_df = d.create_state_df(train_df, bb_states_value, close_sma_ratio_states_value)
-
-
-# In[20]:
-
-
-# Return a list of strings representing the combination of all the states
-all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
-states_size = len(all_states)
-
-
-# Test data
-
-# In[21]:
-
-
-test_df = d.create_df(test_df, 3)
-test_df = d.create_state_df(test_df, bb_states_value, close_sma_ratio_states_value)
-
-
-# ##### (Optional) Visualizing the processed raw input data
-
-# In[22]:
-
-
-plt.hist(train_df['norm_bb_width'], bins=50);
-plt.title('Distribution of Normalized Bollinger Band Width');
-plt.ylabel('Count');
-plt.xlabel('Normalized Bollinger Band Width');
-
-
-# #### Preparation of the Q Table
-
-# In[43]:
-
-
-q_init = initialize_q_mat(all_states, all_actions)/1e9
-
-
-# In[44]:
-
-
-train_data = np.array(train_df[['norm_adj_close', 'state']])
-
-
-# In[47]:
-
-
-q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q_init, alpha=0.8, gamma=0.95, episodes=1)
-
-
-# In[52]:
-
-
-# start_date = datetime.datetime(2014, 1, 1)
-# end_date = datetime.datetime(2018, 1, 1)
-# ticker = 'AAPL'
-
 def trainqlearner(start_date, end_date, ticker):
 
     # Split the data into train and test data set
-    train_df, test_df = d.get_stock_data(ticker, start_date, end_date, 1)
+    train_df = d.get_stock_data(ticker, start_date, end_date)
 
     # Action Definition (= Q table columns)
     all_actions = {0:'hold', 1:'buy', 2:'sell'}
@@ -387,6 +291,7 @@ def trainqlearner(start_date, end_date, ticker):
     train_df = d.create_df(train_df, 3)
 
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
+
     bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
 
     # Create_state_df =  Add state information to the DF
@@ -396,9 +301,6 @@ def trainqlearner(start_date, end_date, ticker):
     all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
     states_size = len(all_states)
 
-    # Test Data
-    test_df = d.create_df(test_df, 3)
-    test_df = d.create_state_df(test_df, bb_states_value, close_sma_ratio_states_value)
 
     # Preparation of the Q Table
     q_init = initialize_q_mat(all_states, all_actions)/1e9
