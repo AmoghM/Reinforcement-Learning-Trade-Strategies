@@ -24,7 +24,7 @@ start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
 
 q, bb_states_value, SMA_ratio_quantiles = tu.trainqlearner(start_date, end_date, ticker)
-q.columns = ['BUY', 'SELL', 'HOLD']
+q.columns = ['HOLD', 'BUY', 'SELL']
 bb_ = list(bb_states_value.values())
 sma_ = list(SMA_ratio_quantiles.values())
 
