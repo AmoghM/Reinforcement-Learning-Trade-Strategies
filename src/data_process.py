@@ -134,14 +134,14 @@ def get_states(df):
     Input:
     df(dataframe)
     Output:
-    the discretized dictionary of norm_bb_width, 
+    the discretized dictionary of norm_bb_width,
     norm_adj_close, norm_close_sma_ratio columns
     '''
     # discretize values
     # price_states_value = discretize(df['norm_adj_close'])
     bb_states_value = discretize(df['norm_bb_width'])
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
-    
+
     return bb_states_value, close_sma_ratio_states_value
 
 def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
@@ -168,7 +168,7 @@ def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
 
 def get_all_states(bb_states_value, close_sma_ratio_states_value):
     '''
-    Combine all the states from the discretized 
+    Combine all the states from the discretized
     norm_adj_close, norm_close_sma_ratio columns.
     Inputs:
     price_states_value(dict)

@@ -27,18 +27,18 @@ def initialize_q_mat(all_states, all_actions):
     Inputs:
     all_states: a list of all the states values
     all_actions: a dictionary of all possible actions to take
-    Output: 
+    Output:
     q_mat: randomly initialized Q-table
     '''
     states_size = len(all_states)
     actions_size = len(all_actions)
-    
+
     q_mat = np.random.rand(states_size, actions_size)/1e9
     q_mat = pd.DataFrame(q_mat, columns=all_actions.keys())
-    
+
     q_mat['states'] = all_states
     q_mat.set_index('states', inplace=True)
-    
+
     return q_mat
 
 
@@ -49,19 +49,19 @@ def initialize_q_mat(all_states, all_actions):
 
 def act(state, q_mat, threshold=0.2, actions_size=3):
     '''
-    Taking an action based on different strategies: 
-    either random pick actions or take the actions 
+    Taking an action based on different strategies:
+    either random pick actions or take the actions
     with the highest future return
     Inputs:
     state(str)
     q_mat(dataframe): Q-table
     threshold(float): the percentage of picking a random action
-    action_size(int): number of possible actions 
+    action_size(int): number of possible actions
     Output:
     action(int)
     '''
     if np.random.uniform(0,1) < threshold: # go random
-        action = np.random.randint(low=0, high=actions_size)  
+        action = np.random.randint(low=0, high=actions_size)
     else:
         action = np.argmax(q_mat.loc[state].values)
     return action
@@ -76,14 +76,14 @@ def get_return_since_entry(bought_history, current_adj_close):
     '''
     Calculate the returns of current share holdings.
     Inputs:
-    bought_history(list) 
+    bought_history(list)
     current_adj_close(float)
     current_day(int)
     Output:
     return_since_entry(float)
     '''
     return_since_entry = 0.
-    
+
     for b in bought_history:
         return_since_entry += (current_adj_close - b)
     return return_since_entry
@@ -104,9 +104,9 @@ def visualize_results(actions_history, returns_since_entry):
     None
     '''
     f, (ax1, ax2) = plt.subplots(2, 1, figsize=(15,12))
-    
+
     ax1.plot(returns_since_entry)
-    
+
     days, prices, actions = [], [], []
     for d, p, a in actions_history:
         days.append(d)
@@ -196,7 +196,7 @@ def get_base_return(data):
 
 def train_q_learning(train_data, q, alpha, gamma, episodes):
     '''
-    Train a Q-table 
+    Train a Q-table
     Inputs:
     train_data(dataframe)
     q(dataframe): initial Q-table
@@ -225,7 +225,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
                 break
 
             if len(bought_history) > 0:
-                returns_since_entry.append(get_return_since_entry(bought_history, current_adj_close)) 
+                returns_since_entry.append(get_return_since_entry(bought_history, current_adj_close))
             else:
                 returns_since_entry.append(returns_since_entry[-1])
 
@@ -238,7 +238,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
             if action == 0: # hold
                 if num_shares > 0:
                     prev_adj_close, _ = train_data[i-1]
-                    future = next_adj_close - current_adj_close 
+                    future = next_adj_close - current_adj_close
                     past = current_adj_close - prev_adj_close
                     reward = past
                 else:
@@ -259,7 +259,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
                 else:
                     reward = -100
             actions_history.append((i, current_adj_close, action))
-            
+
             # update q table
             q.loc[state, action] = (1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
     print('End of Training!')
@@ -376,56 +376,37 @@ q, train_actions_history, train_returns_since_entry = train_q_learning(train_dat
 # ticker = 'AAPL'
 
 def trainqlearner(start_date, end_date, ticker):
-    
+
     # Split the data into train and test data set
-    train_df, test_df = d.get_stock_data(ticker, start_date, end_date, 0.8)
-    
+    train_df, test_df = d.get_stock_data(ticker, start_date, end_date, 1)
+
     # Action Definition (= Q table columns)
     all_actions = {0:'hold', 1:'buy', 2:'sell'}
-    
+
     # create_df = normalized predictors norm_bb_width, norm_adj_close, norm_close_sma_ratio
     train_df = d.create_df(train_df, 3)
-    
+
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
     bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
-    
+
     # Create_state_df =  Add state information to the DF
     train_df = d.create_state_df(train_df, bb_states_value, close_sma_ratio_states_value)
-    
+
     # Return a list of strings representing the combination of all the states
     all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
     states_size = len(all_states)
-    
+
     # Test Data
     test_df = d.create_df(test_df, 3)
     test_df = d.create_state_df(test_df, bb_states_value, close_sma_ratio_states_value)
-    
+
     # Preparation of the Q Table
     q_init = initialize_q_mat(all_states, all_actions)/1e9
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q_init, alpha=0.8, gamma=0.95, episodes=1)
-    
+
     # Specify quantiles
     BB_quantiles = bb_states_value
     SMA_ratio_quantiles = close_sma_ratio_states_value
-    
+
     return q, bb_states_value, SMA_ratio_quantiles
-
-
-# In[56]:
-
-
-start_date = datetime.datetime(2014, 1, 1)
-end_date = datetime.datetime(2018, 1, 1)
-ticker = 'AAPL'
-
-q, bb_states_value, SMA_ratio_quantiles = trainqlearner(start_date, end_date, ticker)
-
-q, bb_states_value, SMA_ratio_quantiles
-
-
-# In[ ]:
-
-
-
-
