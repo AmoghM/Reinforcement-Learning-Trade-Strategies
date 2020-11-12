@@ -693,6 +693,11 @@ def return_stats(stock='jpm',
 
         del dic['state_history']
         del dic['qtable']
+        try:
+            del dic['BB_quantiles']
+            del dic['SMA_quantiles']
+        except:
+            pass
         df = pd.DataFrame(dic)
 
         plt.figure(figsize=(14,8))
