@@ -4,6 +4,19 @@ import pandas as pd
 import pandas_datareader.data as web  # fetch stock data
 
 
+def get_upper_lower_bands(values, window):
+
+    upper = values.rolling(window=window).mean() + \
+        values.rolling(window=window).std() * 2
+    lower = values.rolling(window=window).mean() - \
+        values.rolling(window=window).std() * 2
+
+    upper = upper.apply(lambda x: round(x, 5))
+    lower = lower.apply(lambda x: round(x, 5))
+
+    return upper, lower
+
+
 def get_stock_data(symbol, start, end):
     '''
     Get stock data in the given date range
@@ -50,7 +63,7 @@ def get_adj_close_sma_ratio(values, window):
     return ratio.apply(lambda x: round(x, 5))
 
 
-def discretize(values, num_states=9):
+def discretize(values, num_states=4):
     '''
     Convert continuous values to integer state
     Inputs:
@@ -99,23 +112,27 @@ def create_df(df, window=3):
     df(dataframe): a new dataframe with normalized predictors
     '''
 
-    # get bollinger value
-    bb_width = get_bollinger_bands(df['Adj Close'], window)
     # get the ratio of close price to simple moving average
     close_sma_ratio = get_adj_close_sma_ratio(df['Adj Close'], window)
+    # get the upper and lower BB values
+    upper, lower = get_upper_lower_bands(df['Adj Close'], window)
 
-    # create bb-width, close-sma-ratio columns
-    df['bb_width'] = bb_width
+    # create bb measure, close-sma-ratio columns
     df['close_sma_ratio'] = close_sma_ratio
+    df['upper_bb'] = upper
+    df['lower_bb'] = lower
 
     # drop missing values
     df.dropna(inplace=True)
 
+    # Calculate the Bollinger Percentage
+    df['percent_b'] = (df['Adj Close'] - df['lower_bb']) * \
+        100 / (df['upper_bb'] - df['lower_bb'])
+
     # normalize close price
-    df['norm_adj_close'] = df['Adj Close']#/df.iloc[0, :]['Adj Close']
-    df['norm_bb_width'] = df['bb_width']#/df.iloc[0, :]['bb_width']
-    df['norm_close_sma_ratio'] = df['close_sma_ratio'] #/ \
-        #df.iloc[0, :]['close_sma_ratio']
+    df['norm_adj_close'] = df['Adj Close']/df.iloc[0, :]['Adj Close']
+    df['norm_close_sma_ratio'] = df['close_sma_ratio'] / \
+        df.iloc[0, :]['close_sma_ratio']
 
     return df
 
@@ -130,13 +147,20 @@ def get_states(df):
     norm_adj_close, norm_close_sma_ratio columns
     '''
     # discretize values
-    # price_states_value = discretize(df['norm_adj_close'])
-    bb_states_value = discretize(df['norm_bb_width'])
+    percent_b_states_values = {
+        0: 0,
+        1: 25,
+        2: 75,
+        3: 100,
+        4: float('inf')
+    }
+
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
 
-    return bb_states_value, close_sma_ratio_states_value
+    return percent_b_states_values, close_sma_ratio_states_value
 
-def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
+
+def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value):
     '''
     Add a new column to hold the state information to the dataframe
     Inputs:
@@ -147,20 +171,19 @@ def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
     Output:
     df(dataframe)
     '''
-
-    df['norm_bb_width_state'] = df['norm_bb_width'].apply(
-        lambda x: value_to_state(x, bb_states_value))  # 2
+    df['percent_b_state'] = df['percent_b'].apply(
+        lambda x: value_to_state(x, percent_b_states_values))
     df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(
         lambda x: value_to_state(x, close_sma_ratio_states_value))
 
-    df['state'] = df['norm_close_sma_ratio_state'] + df['norm_bb_width_state']
+    df['state'] = df['norm_close_sma_ratio_state'] + df['percent_b_state']
     df.dropna(inplace=True)
     return df
 
 
-def get_all_states(bb_states_value, close_sma_ratio_states_value):
+def get_all_states(percent_b_states_values, close_sma_ratio_states_value):
     '''
-    Combine all the states from the discretized
+    Combine all the states from the discretized 
     norm_adj_close, norm_close_sma_ratio columns.
     Inputs:
     price_states_value(dict)
@@ -170,9 +193,8 @@ def get_all_states(bb_states_value, close_sma_ratio_states_value):
     states(list): list of strings
     '''
     states = []
-
     for c, _ in close_sma_ratio_states_value.items():
-        for b, _ in bb_states_value.items():
+        for b, _ in percent_b_states_values.items():
             state = str(c) + str(b)
             states.append(str(state))
 
