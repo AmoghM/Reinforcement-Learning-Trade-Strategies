@@ -6,9 +6,9 @@ import statsmodels.api as sm
 from statsmodels.tools.tools import add_constant
 from scipy.stats import ttest_ind, levene
 import math as m
-from yfinance import download
 from seaborn import heatmap
 import data_process as d
+from data_process import histerror, checkhist, read_stock, returns
 import trainqlearner_util as tu
 import time
 import pandas_datareader.data as web # fetch stock data
@@ -23,88 +23,26 @@ end = '2019-12-31'
 start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
 
-q, bb_states_value, SMA_ratio_quantiles = tu.trainqlearner(start_date, end_date, ticker)
+q, bb_states_value, SMA_ratio_quantiles, MRDR_values = tu.trainqlearner(start_date, end_date, ticker)
 q.columns = ['HOLD', 'BUY', 'SELL']
 bb_ = list(bb_states_value.values())
 sma_ = list(SMA_ratio_quantiles.values())
+mrdr_ = list(MRDR_values.values())
 
 # Fixing the range problem
 # q.iloc[0] = q.iloc[0] * 1e-16
 #nq = (q - q.mean()) / q.std()
 nq=q
 nq.columns = ['HOLD', 'BUY', 'SELL']
-nq = nq[['BUY','HOLD','SELL']]
+
+action_list = ['BUY','HOLD','SELL']
+nq = nq[action_list]
 
 nq = nq.div(nq.abs().max(axis=1), axis=0)
 
 
-# define exception class for unequal stock histories
-def histerror(a,b):
-    '''
-    Checks if stock histories a and b have the same length
-
-    Inputs
-    a: stock history (list-like)
-    b: stock history (list-like)
-
-    Output
-    Exception if histories are not equal length
-    '''
-
-    class HistoryError(Exception):
-        pass
-    raise HistoryError('Stocks do not have equal history')
-
-def checkhist(a,b):
-    '''
-    Raises exception if stock histories a and b have the same length
-
-    Inputs
-    a: stock history (list-like)
-    b: stock history (list-like)
-
-    Output
-    Raises the xception if histories are not equal length
-    '''
-
-    if len(a) != len(b):
-        histerror(a,b)
-
-
-def read_stock(stock):
-    '''
-    Reads stock table from Yahoo Finance
-
-    Inputs
-    stock: symbol of stock (str)
-
-    Output
-    Pandas Series of daily stock adj close
-    '''
-
-    tab = download(stock, start=start, end=end)['Adj Close']
-    tab.name = stock.upper()
-    return tab
-
-def returns(stock_table):
-    '''
-    Calculates daily returns from a series of daily stock or portfolio values
-
-    Inputs
-    stock_table: list of daily stock or portfolio values
-
-    Output
-    returns: daily multiplier return values (Series)
-    '''
-
-    returns = stock_table.copy()
-    returns.iloc[1:] = returns.iloc[1:]/returns.values[:-1]
-    returns.iloc[0] = 1
-    return returns
-
-
 # function to hold every day
-def hold(stock_table,money,inc,original_shares):
+def hold(stock_table,money,inc,original_shares,commission,):
     '''
     Enacts hold-every-day strategy
 
@@ -149,13 +87,18 @@ def hold(stock_table,money,inc,original_shares):
 
     # add original cash to this
     final_vals += money
+    
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
+    
+    markov.loc['HOLD','HOLD']=1
 
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov,'state_history': None}
     return results
 
 
 # function to randomly choose action every day
-def random_action(stock_table,money,inc,original_shares):
+def random_action(stock_table,money,inc,original_shares,commission):
     '''
     Enacts random-daily-action strategy
 
@@ -189,6 +132,9 @@ def random_action(stock_table,money,inc,original_shares):
     # create shares table
     shares = stock_table.copy()
     shares.iloc[0] = original_shares
+    
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
 
     # create cash table
     cash = stock_table.copy()
@@ -227,22 +173,28 @@ def random_action(stock_table,money,inc,original_shares):
             cash.iloc[i] = cash.values[j]
             shares.iloc[i] = shares.values[j]
         if act == 'BUY':
-            cash.iloc[i] = cash.values[j] - (inc*cur_price)
+            cash.iloc[i] = cash.values[j] - (inc*cur_price) - commission
             shares.iloc[i] = shares.values[j] + inc
         if act == 'SELL':
-            cash.iloc[i] = cash.values[j] + (inc*cur_price)
+            cash.iloc[i] = cash.values[j] + (inc*cur_price) - commission
             shares.iloc[i] = shares.values[j] - inc
 
         actions += [act]
+        
+        # increment markov
+        markov.loc[actions[j],actions[i]] +=1
 
     actions = pd.Series(actions,index=stock_table.index)
+    
+    # normalize markov
+    markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
 
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history':None}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov,'state_history':None}
     return results
 
 
 #function to choose action based on yesterday's return
-def rule_based(stock_table,money,inc, original_shares):
+def rule_based(stock_table,money,inc, original_shares,commission):
     '''
     Enacts rule-based (buy/sell/hold based on prior day's return) strategy
 
@@ -280,6 +232,9 @@ def rule_based(stock_table,money,inc, original_shares):
     # create cash table
     cash = stock_table.copy()
     cash.iloc[0] = money
+    
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
 
     # calculate daily portfolio value
     final_vals = stock_table.copy()
@@ -322,22 +277,28 @@ def rule_based(stock_table,money,inc, original_shares):
             cash.iloc[i] = cash.values[j]
             shares.iloc[i] = shares.values[j]
         if act == 'BUY':
-            cash.iloc[i] = cash.values[j] - (inc*cur_price)
+            cash.iloc[i] = cash.values[j] - (inc*cur_price)  - commission
             shares.iloc[i] = shares.values[j] + inc
         if act == 'SELL':
-            cash.iloc[i] = cash.values[j] + (inc*cur_price)
+            cash.iloc[i] = cash.values[j] + (inc*cur_price)  - commission
             shares.iloc[i] = shares.values[j] - inc
 
         actions += [act]
+        
+        # increment markov
+        markov.loc[actions[j],actions[i]] +=1
 
     actions = pd.Series(actions,index=stock_table.index)
-
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
+    
+    # normalize markov
+    markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
+    
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov, 'state_history': None}
     return results
 
 
 # function to choose action based on OLS of returns looking back to trading days t-6 to t-1
-def ols(stock_table,money,inc, original_shares):
+def ols(stock_table,money,inc, original_shares,commission):
     '''
     Enacts OLS strategy based on last five days
 
@@ -382,9 +343,13 @@ def ols(stock_table,money,inc, original_shares):
     # calculate daily portfolio value
     final_vals = stock_table.copy()
     final_vals.iloc[0] = original_val
+    
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
 
     # iterate through days
     for i in range(1,stock_table.shape[0]):
+    
         j = i-1 # last day
         cur_cash = cash.values[j] # current cash
         cur_shares = shares.values[j] # current shares
@@ -427,21 +392,27 @@ def ols(stock_table,money,inc, original_shares):
             cash.iloc[i] = cash.values[j]
             shares.iloc[i] = shares.values[j]
         if act == 'BUY':
-            cash.iloc[i] = cash.values[j] - (inc*cur_price)
+            cash.iloc[i] = cash.values[j] - (inc*cur_price)  - commission
             shares.iloc[i] = shares.values[j] + inc
         if act == 'SELL':
-            cash.iloc[i] = cash.values[j] + (inc*cur_price)
+            cash.iloc[i] = cash.values[j] + (inc*cur_price)  - commission
             shares.iloc[i] = shares.values[j] - inc
 
         actions += [act]
 
+        # increment markov
+        markov.loc[actions[j],actions[i]] +=1
+        
     actions = pd.Series(actions,index=stock_table.index)
-
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'state_history': None}
+    
+    # normalize markov
+    markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
+    
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov,'state_history': None}
     return results
 
 # def qlearner(stock_table,money,inc, original_shares,qtable=ql[0], BB_quantiles=ql[1], SMA_quantiles=ql[2],window=window):
-def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, window=3): # defining defaults here prevents need for args to be passed in return_stats function
+def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, MRDR_quantiles=mrdr_, window=3): # defining defaults here prevents need for args to be passed in return_stats function
     '''
     Enacts qlearning
 
@@ -490,8 +461,15 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
 
     state_history = {}
 
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
+    
+    # define baseline for mrdr
+    baseline = read_stock('^GSPC',start,end)
+
     # iterate through days
     for i in range(1,stock_table.shape[0]):
+    
         j = i-1 # last day
         cur_cash = cash.values[j] # current cash
         cur_shares = shares.values[j] # current shares
@@ -504,17 +482,31 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
             bb = d.get_bollinger_bands(stock_table.iloc[:i],window).iloc[j]
 
             # find yesterday's final bollinger band quantile
-            bbq = np.argwhere(np.where(BB_quantiles>bb,1,0))[0][0]
-#                 print(np.argwhere(np.where(BB_quantiles>bb,1,0)))
+            if bb != float('inf'):
+                bbq = np.argwhere(np.where(BB_quantiles>bb,1,0))[0][0]
+            else:
+                bbq = len(BB_quantiles) - 1
 
             # find current SMA value
             sma = d.get_adj_close_sma_ratio(stock_table.iloc[:i],window).iloc[j]
 
             # find current SMA quantile
-            smq = np.argwhere(np.where(SMA_quantiles>sma,1,0))[0][0]
+            if sma != float('inf'):
+                smq = np.argwhere(np.where(SMA_quantiles>sma,1,0))[0][0]
+            else:
+                smq = len(SMA_quantiles) - 1
+                
+            # find current SMA value
+            mra = d.get_mrdr(stock_table.iloc[:i],baseline).iloc[-1]
+
+            # find current SMA quantile
+            if mra != float('inf'):
+                mrq = np.argwhere(np.where(MRDR_quantiles>mra,1,0))[0][0]
+            else:
+                mrq = len(MRDR_quantiles) - 1
 
             # find state based on these two pieces of information
-            state = str(bbq) + str(smq)
+            state = str(bbq) + str(smq) + str(mrq)
 
             # locate *optimal* action from Q table, which we will then examine to see if it's possible
 #             print("STATE: ", state, str(bbq), str(smq))
@@ -559,21 +551,29 @@ def qlearner(stock_table,money,inc, original_shares, qtable=nq, BB_quantiles= bb
             cash.iloc[i] = cash.values[j]
             shares.iloc[i] = shares.values[j]
         if act == 'BUY':
-            cash.iloc[i] = cash.values[j] - (inc*cur_price)
+            cash.iloc[i] = cash.values[j] - (inc*cur_price) - commission
             shares.iloc[i] = shares.values[j] + inc
         if act == 'SELL':
-            cash.iloc[i] = cash.values[j] + (inc*cur_price)
+            cash.iloc[i] = cash.values[j] + (inc*cur_price) - commission
             shares.iloc[i] = shares.values[j] - inc
 
         actions += [act]
 
+        # increment markov
+        markov.loc[actions[j],actions[i]] +=1
+        
+        
+    # normalize markov
+    markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
+    
     actions = pd.Series(actions,index=stock_table.index)
 
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history),'BB_quantiles':BB_quantiles,'SMA_quantiles':SMA_quantiles}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history),'BB_quantiles':BB_quantiles,'SMA_quantiles':SMA_quantiles,'MRDR_quantiles':MRDR_quantiles, 'markov':markov}
     return results
 
 # function to return stats and graphs
 def return_stats(stock='jpm',
+                 commission = 2,
                  money=100000,
                  #inc=10,- can read this argument and change code below if doing absolute share-based
                  #original_shares=100, - can read this argument and change code below if doing absolute share-based
@@ -593,12 +593,13 @@ def return_stats(stock='jpm',
 
     Provides numerous summary statistics and visualizations
     '''
-
+    
     original_money = money
 
     # generate stock table
-    stock_table = read_stock(stock)
+    stock_table = read_stock(stock,start,end)
 
+    
     # note stock name
     stock_name = stock.upper()
 
@@ -615,14 +616,15 @@ def return_stats(stock='jpm',
     results = {policy.__name__:policy(stock_table,
                                       money = money,
                                       inc = inc,
-                                      original_shares = original_shares) for policy in policies}
+                                      original_shares = original_shares,
+                                     commission = commission) for policy in policies}
 
     # plot qtables only for qlearner (or any other strategies with Q table)
     for policy in policies:
         if results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
 
             qtab = results[policy.__name__]['qtable']
-
+            
             # marginalize over bollinger bands
             # TODO - determine if this mean was taken correctly
             qtab_bb_tmp = qtab.copy()
@@ -634,11 +636,14 @@ def return_stats(stock='jpm',
 
             # plot BB heatmap
             plt.figure(figsize=(9,7))
-            heatmap(qtab_bb)
-            plt.title('Rolling T-Score (Bollinger Band Location) Q-Table',size=16)
+            fig = heatmap(qtab_bb,cmap='Blues')
+            plt.title('Bollinger Band % Q-Table',size=16)
+            plt.gca().hlines([i+1 for i in range(len(qtab_bb.index))],xmin=0,xmax=10,linewidth=10,color='white')
             plt.xticks(fontsize=15)
-            plt.yticks(fontsize=14)
-            plt.show()
+            plt.yticks(fontsize=14,rotation=0)
+            plt.gca().tick_params(axis='x',bottom=False,left=False)
+            plt.gca().tick_params(axis='y',bottom=False,left=False)
+            plt.show(fig)
 
             # marginalize over SMA
             # TODO - determine if this mean was taken correctly
@@ -649,12 +654,49 @@ def return_stats(stock='jpm',
             qtab_sma.index = np.round(np.flip(np.array(results[policy.__name__]['SMA_quantiles'])),5)
 
             plt.figure(figsize=(9,7))
-            heatmap(qtab_sma)
+            fig = heatmap(qtab_sma,cmap='Blues')
             plt.title('Simple Moving Average Q-Table',size=16)
+            plt.gca().hlines([i+1 for i in range(len(qtab_sma.index))],xmin=0,xmax=10,linewidth=10,color='white')
             plt.xticks(fontsize=15)
-            plt.yticks(fontsize=14)
-            plt.show()
+            plt.yticks(fontsize=14,rotation=0)
+            plt.gca().tick_params(axis='x',bottom=False,left=False)
+            plt.gca().tick_params(axis='y',bottom=False,left=False)
+            plt.show(fig)
+            
+            # marginalize over MRDR
+            # TODO - determine if this mean was taken correctly
+            qtab_mrdr_tmp = qtab.copy()
+            qtab_mrdr_tmp.index = [s[2] for s in qtab.index] # get third value for each state, indicating MRDR
+            qtab_mrdr = qtab_mrdr_tmp.groupby(qtab_sma_tmp.index).mean()
+            qtab_mrdr = qtab_mrdr.iloc[::-1]
+            qtab_mrdr.index = np.round(np.flip(np.array(results[policy.__name__]['MRDR_quantiles'])),5)
+            
+            plt.figure(figsize=(9,7))
+            fig = heatmap(qtab_mrdr,cmap='Blues')
+            plt.title('Market Relative Daily Return Q-Table',size=16)
+            plt.gca().hlines([i+1 for i in range(len(qtab_mrdr.index))],xmin=0,xmax=10,linewidth=10,color='white')
+            plt.xticks(fontsize=15)
+            plt.yticks(fontsize=14,rotation=0)
+            plt.gca().tick_params(axis='x',bottom=False,left=False)
+            plt.gca().tick_params(axis='y',bottom=False,left=False)
+            plt.show(fig)
+            
 
+    # get markov transition models
+    for policy in policies:
+        plt.figure(figsize=(6,3))
+        plt.title('Transition Matrix For '+policy.__name__,size=16)
+        mkv = results[policy.__name__]['markov']
+        fig = heatmap(mkv,annot=True,annot_kws={'size':14},cmap='Greens',cbar=False)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14,rotation=0)
+        plt.gca().set(xlabel='Current Trading Day', ylabel='Last Trading Day')
+        plt.gca().tick_params(axis='x',bottom=False,left=False)
+        plt.gca().tick_params(axis='y',bottom=False,left=False)
+        plt.gca().hlines([1,2],xmin=0,xmax=10,linewidth=10,color='white')
+        plt.show(fig)
+        
+        
     # plot daily portfolio values
     plt.figure(figsize=(14,8))
     for policy in policies:
@@ -693,9 +735,11 @@ def return_stats(stock='jpm',
 
         del dic['state_history']
         del dic['qtable']
+        del dic['markov']
         try:
             del dic['BB_quantiles']
             del dic['SMA_quantiles']
+            del dic['MRDR_quantiles']
         except:
             pass
         df = pd.DataFrame(dic)
@@ -845,4 +889,4 @@ if __name__ == '__main__':
 
     stocks = ticker
     for stock in [stocks]:
-        return_stats(stock)
+        return_stats(stock=stock)

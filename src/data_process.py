@@ -2,7 +2,81 @@ import datetime
 import numpy as np
 import pandas as pd
 import pandas_datareader.data as web  # fetch stock data
+from yfinance import download
 
+# define exception class for unequal stock histories
+def histerror(a,b):
+    '''
+    Checks if stock histories a and b have the same length
+
+    Inputs
+    a: stock history (list-like)
+    b: stock history (list-like)
+
+    Output
+    Exception if histories are not equal length
+    '''
+
+    class HistoryError(Exception):
+        pass
+    raise HistoryError('Stocks do not have equal history')
+
+def checkhist(a,b):
+    '''
+    Raises exception if stock histories a and b have the same length
+
+    Inputs
+    a: stock history (list-like)
+    b: stock history (list-like)
+
+    Output
+    Raises the xception if histories are not equal length
+    '''
+
+    if len(a) != len(b):
+        histerror(a,b)
+
+
+def read_stock(stock, start = '2017-01-01',end = '2019-12-31'):
+    '''
+    Reads stock table from Yahoo Finance
+
+    Inputs
+    stock: symbol of stock (str)
+
+    Output
+    Pandas Series of daily stock adj close
+    '''
+    
+    tab = download(stock,start,end)['Adj Close']
+    tab.name = stock.upper()
+    '''
+    PLEASE KEEP THIS HERE IN CASE BEN IS REMOTE
+    if stock.lower() == '^fvx':
+        tab = pd.read_csv('fvx_test.csv',index_col='Date')['Adj Close']
+    elif stock.lower() == '^gspc':
+        tab = pd.read_csv('gspc_test.csv',index_col='Date')['Adj Close']
+    elif stock.lower() == 'jpm':
+        tab = pd.read_csv('test.csv',index_col='Date')['Adj Close']
+    tab.index = pd.to_datetime(tab.index)
+    '''
+    return tab
+
+def returns(stock_table):
+    '''
+    Calculates daily returns from a series of daily stock or portfolio values
+
+    Inputs
+    stock_table: list of daily stock or portfolio values
+
+    Output
+    returns: daily multiplier return values (Series)
+    '''
+
+    returns = stock_table.copy()
+    returns.iloc[1:] = returns.iloc[1:]/returns.values[:-1]
+    returns.iloc[0] = 1
+    return returns
 
 def get_upper_lower_bands(values, window):
 
@@ -28,7 +102,12 @@ def get_stock_data(symbol, start, end):
     Outputs:
     train_df, test_df OR df(if train_size=1)
     '''
-    df = web.DataReader(symbol, 'yahoo', start, end)
+    df = web.DataReader(symbol, 'yahoo', start, end) 
+    '''
+    PLEASE KEEP HERE IN CASE BEN REMOTE
+    df = pd.read_csv('train.csv',index_col='Date')
+    df.index=pd.to_datetime(df.index)
+    '''
     return df
 
 
@@ -61,6 +140,37 @@ def get_adj_close_sma_ratio(values, window):
     rm = values.rolling(window=window).mean()
     ratio = values/rm
     return ratio.apply(lambda x: round(x, 5))
+
+def get_mrdr(values,baseline):
+    '''
+    Returns the market relative daily return over the window:
+    INPUTS:
+    values(pandas series)
+    window(int): time period to consider - 
+    OUTPUTS:
+    market relative daily return(series)
+    '''
+
+    valnew = values.iloc[-3:]
+    mx = valnew.index.max()
+    gspc_temp = baseline[baseline.index <= mx].iloc[-3:]
+    
+    gspc = gspc_temp.reindex(valnew.index).fillna(method='ffill')
+
+    checkhist(gspc,valnew)
+    
+    if not gspc.index.equals(valnew.index):
+        raise ValueError('Stock indecies do not match')
+    
+    gspc_rets = returns(gspc)
+    stock_rets = returns(valnew)
+    
+    mrdr = stock_rets / gspc_rets
+    
+    if not gspc.index.equals(valnew.index) and values.index[-1] == mrdr.index[-1]:
+        raise ValueError('Stock indecies do not match')
+    
+    return mrdr
 
 
 def discretize(values, num_states=4):
@@ -116,12 +226,16 @@ def create_df(df, window=3):
     close_sma_ratio = get_adj_close_sma_ratio(df['Adj Close'], window)
     # get the upper and lower BB values
     upper, lower = get_upper_lower_bands(df['Adj Close'], window)
+    # get mrdr
+    baseline = read_stock('^GSPC','2007-01-01','2016-12-31')
+    mrdr = get_mrdr(df['Adj Close'],baseline)
 
     # create bb measure, close-sma-ratio columns
     df['close_sma_ratio'] = close_sma_ratio
     df['upper_bb'] = upper
     df['lower_bb'] = lower
-
+    df['mrdr'] = mrdr
+    
     # drop missing values
     df.dropna(inplace=True)
 
@@ -157,10 +271,12 @@ def get_states(df):
 
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
 
-    return percent_b_states_values, close_sma_ratio_states_value
+    mrdr_value = discretize(df['mrdr'])
+    
+    return percent_b_states_values, close_sma_ratio_states_value, mrdr_value
 
 
-def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value):
+def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value,mrdr_value):
     '''
     Add a new column to hold the state information to the dataframe
     Inputs:
@@ -175,13 +291,16 @@ def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value):
         lambda x: value_to_state(x, percent_b_states_values))
     df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(
         lambda x: value_to_state(x, close_sma_ratio_states_value))
+    df['mrdr_state'] = df['mrdr'].apply(
+        lambda x: value_to_state(x, mrdr_value))
 
-    df['state'] = df['norm_close_sma_ratio_state'] + df['percent_b_state']
+    df['state'] = df['norm_close_sma_ratio_state'] + df['percent_b_state'] + df['mrdr_state']
+
     df.dropna(inplace=True)
     return df
 
 
-def get_all_states(percent_b_states_values, close_sma_ratio_states_value):
+def get_all_states(percent_b_states_values, close_sma_ratio_states_value,mrdr_value):
     '''
     Combine all the states from the discretized 
     norm_adj_close, norm_close_sma_ratio columns.
@@ -195,7 +314,11 @@ def get_all_states(percent_b_states_values, close_sma_ratio_states_value):
     states = []
     for c, _ in close_sma_ratio_states_value.items():
         for b, _ in percent_b_states_values.items():
-            state = str(c) + str(b)
-            states.append(str(state))
+            for m, _ in mrdr_value.items():
+                state = str(c) + str(b) + str(m)
+                states.append(str(state))
 
     return states
+
+
+

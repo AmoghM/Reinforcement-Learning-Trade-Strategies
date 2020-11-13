@@ -3,7 +3,6 @@
 
 # In[1]:
 
-
 import time
 import datetime
 import numpy as np
@@ -192,7 +191,8 @@ def get_base_return(data):
 # In[46]:
 
 
-def train_q_learning(train_data, q, alpha, gamma, episodes):
+def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
+    episode = 0
     '''
     Train a Q-table
     Inputs:
@@ -200,16 +200,16 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
     q(dataframe): initial Q-table
     alpha(float): threshold of which action strategy to take
     gamma(float): discount percentage on the future return
+    commission(float): amount charged for stock transaction
     Output:
     q(dataframe): Updated Q-table
     actions_history(dict): has everydays' actions and close price
     returns_since_entry(list): contains every day's return since entry
     '''
-    actions_history = []
-    num_shares = 0
-    bought_history = []
-    returns_since_entry = [0]
+    
     for ii in range(episodes):
+        episode +=1
+        print('Training episode {}'.format(episode))
         actions_history = []
         num_shares = 0
         bought_history = []
@@ -244,14 +244,14 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
                     reward = 0
 
             if action == 1:  # buy
-                reward = 0
+                reward = 0-commission
                 num_shares += 1
                 bought_history.append((current_adj_close))
 
             if action == 2:  # sell
                 if num_shares > 0:
                     bought_price = bought_history[0]
-                    reward = (current_adj_close - bought_price)
+                    reward = (current_adj_close - bought_price) - commission
                     bought_history.pop(0)
                     num_shares -= 1
 
@@ -290,28 +290,30 @@ def trainqlearner(start_date, end_date, ticker):
     train_df = d.create_df(train_df, 3)
 
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
-    percent_b_states_values, close_sma_ratio_states_value = d.get_states(
+    percent_b_states_values, close_sma_ratio_states_value, mrdr_value = d.get_states(
         train_df)
 
     # Create_state_df =  Add state information to the DF
     train_df = d.create_state_df(
-        train_df, percent_b_states_values, close_sma_ratio_states_value)
+        train_df, percent_b_states_values, close_sma_ratio_states_value,mrdr_value)
     #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
 
     # Return a list of strings representing the combination of all the states
     all_states = d.get_all_states(
-        percent_b_states_values, close_sma_ratio_states_value)
+        percent_b_states_values, close_sma_ratio_states_value, mrdr_value)
     # all_states = d.get_all_states(None, percent_b_states_values, close_sma_ratio_states_value)
     states_size = len(all_states)
 
     # Preparation of the Q Table
     q_init = initialize_q_mat(all_states, all_actions)/1e9
+    
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1)
+        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1,commission=2)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values
     SMA_ratio_quantiles = close_sma_ratio_states_value
+    MRDR_quantiles = mrdr_value
 
-    return q, percent_b_states_values, SMA_ratio_quantiles
+    return q, percent_b_states_values, SMA_ratio_quantiles, MRDR_quantiles
