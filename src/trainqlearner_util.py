@@ -309,7 +309,7 @@ def trainqlearner(start_date, end_date, ticker):
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1,commission=2)
+        train_data, q_init, alpha=0.8, gamma=0.95, episodes=25,commission=2)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values

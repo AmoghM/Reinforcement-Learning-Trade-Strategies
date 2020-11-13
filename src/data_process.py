@@ -320,5 +320,37 @@ def get_all_states(percent_b_states_values, close_sma_ratio_states_value,mrdr_va
 
     return states
 
+def weighted_average_and_normalize(qtable,state_history,state_num,quantile_length):
+    '''
+    takes a q table and does a weighted average group by given the input state_number (what digit number it is in the state)
+    
+    Inputs:
+    qtable: the qtable (DataFrame)
+    state_history: the state history (Series)
+    state_num: the number digit that indicates the state
+    quantile_length: the number of quantiles we built this out with
+    '''
+    qtab_2 = pd.merge(qtable,pd.Series(state_history,name='state_history'),'inner',left_index=True,right_index=True)
+    
+    sh = qtab_2['state_history']
+    qtab_2 = qtab_2.drop(columns=['state_history']).multiply(qtab_2['state_history'],axis=0)
+    
+    qtab_2 = pd.merge(qtab_2,sh,'inner',left_index=True,right_index=True)
+    
+    qtab_2['state'] = qtab_2.index.str.slice(state_num,state_num+1)
+    
+    qtab_3 = qtab_2.groupby('state').sum()
+    
+    qtab_4 = qtab_3.divide(qtab_3['state_history'],axis=0).drop(columns='state_history')
+    
+    qtab_5 = qtab_4.reindex([str(i) for i in range(quantile_length)])
+    
+    #normalize by max
+    qtab_6 = qtab_5.divide(qtab_5.max(axis=1),axis=0)
+    
+    return qtab_6
+    
+    
+                                           
 
 

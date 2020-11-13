@@ -8,7 +8,7 @@ from scipy.stats import ttest_ind, levene
 import math as m
 from seaborn import heatmap
 import data_process as d
-from data_process import histerror, checkhist, read_stock, returns
+from data_process import histerror, checkhist, read_stock, returns, weighted_average_and_normalize
 import trainqlearner_util as tu
 import time
 import pandas_datareader.data as web # fetch stock data
@@ -38,7 +38,7 @@ nq.columns = ['HOLD', 'BUY', 'SELL']
 action_list = ['BUY','HOLD','SELL']
 nq = nq[action_list]
 
-nq = nq.div(nq.abs().max(axis=1), axis=0)
+# nq = nq.div(nq.abs().max(axis=1), axis=0) forgoing normalization
 
 
 # function to hold every day
@@ -623,13 +623,12 @@ def return_stats(stock='jpm',
     for policy in policies:
         if results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
 
+            # get state history and quantile length and qtable for normalization and averaging function
+            state_history = results[policy.__name__]['state_history']
+            quantile_length = len(results[policy.__name__]['BB_quantiles'])
             qtab = results[policy.__name__]['qtable']
             
-            # marginalize over bollinger bands
-            # TODO - determine if this mean was taken correctly
-            qtab_bb_tmp = qtab.copy()
-            qtab_bb_tmp.index = [s[0] for s in qtab.index] # get first value for each state, indicating BB
-            qtab_bb = qtab_bb_tmp.groupby(qtab_bb_tmp.index).mean()
+            qtab_bb = weighted_average_and_normalize(qtab, state_history, 0, quantile_length)
             qtab_bb = qtab_bb.iloc[::-1] # reverse order of rows for visualization purposes - now biggest value will be on top
             qtab_bb.index = np.round(np.flip(np.array(results[policy.__name__]['BB_quantiles'])),5) # define index as bb quantiles, reversing quantile order in kind so biggest value is first
 
@@ -647,9 +646,7 @@ def return_stats(stock='jpm',
 
             # marginalize over SMA
             # TODO - determine if this mean was taken correctly
-            qtab_sma_tmp = qtab.copy()
-            qtab_sma_tmp.index = [s[1] for s in qtab.index] # get second value for each state, indicating SMA
-            qtab_sma = qtab_sma_tmp.groupby(qtab_sma_tmp.index).mean()
+            qtab_sma = weighted_average_and_normalize(qtab, state_history, 1, quantile_length)
             qtab_sma = qtab_sma.iloc[::-1]
             qtab_sma.index = np.round(np.flip(np.array(results[policy.__name__]['SMA_quantiles'])),5)
 
@@ -665,9 +662,7 @@ def return_stats(stock='jpm',
             
             # marginalize over MRDR
             # TODO - determine if this mean was taken correctly
-            qtab_mrdr_tmp = qtab.copy()
-            qtab_mrdr_tmp.index = [s[2] for s in qtab.index] # get third value for each state, indicating MRDR
-            qtab_mrdr = qtab_mrdr_tmp.groupby(qtab_sma_tmp.index).mean()
+            qtab_mrdr = weighted_average_and_normalize(qtab, state_history, 2, quantile_length)
             qtab_mrdr = qtab_mrdr.iloc[::-1]
             qtab_mrdr.index = np.round(np.flip(np.array(results[policy.__name__]['MRDR_quantiles'])),5)
             
