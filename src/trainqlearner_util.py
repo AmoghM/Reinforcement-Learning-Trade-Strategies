@@ -7,10 +7,10 @@
 import time
 import datetime
 import numpy as np
-import pandas  as pd
+import pandas as pd
 import matplotlib.pyplot as plt
 import data_process as d
-import pandas_datareader.data as web # fetch stock data
+import pandas_datareader.data as web  # fetch stock data
 import seaborn as sns
 
 # get_ipython().magic('matplotlib inline')
@@ -60,7 +60,7 @@ def act(state, q_mat, threshold=0.2, actions_size=3):
     Output:
     action(int)
     '''
-    if np.random.uniform(0,1) < threshold: # go random
+    if np.random.uniform(0, 1) < threshold:  # go random
         action = np.random.randint(low=0, high=actions_size)
     else:
         action = np.argmax(q_mat.loc[state].values)
@@ -103,7 +103,7 @@ def visualize_results(actions_history, returns_since_entry):
     Output:
     None
     '''
-    f, (ax1, ax2) = plt.subplots(2, 1, figsize=(15,12))
+    f, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12))
 
     ax1.plot(returns_since_entry)
 
@@ -113,7 +113,7 @@ def visualize_results(actions_history, returns_since_entry):
         prices.append(p)
         actions.append(a)
 
-    #ax2.figure(figsize=(20,10))
+    # ax2.figure(figsize=(20,10))
     ax2.plot(days, prices, label='normalized adj close price')
     hold_d, hold_p, buy_d, buy_p, sell_d, sell_p = [], [], [], [], [], []
     for d, p, a in actions_history:
@@ -158,12 +158,13 @@ def get_invested_capital(actions_history, returns_since_entry):
             break
         if a == 1:
             total += p
-            if next_a != 1 or (i==len(actions_history)-2 and next_a==1):
+            if next_a != 1 or (i == len(actions_history)-2 and next_a == 1):
                 invest.append(total)
                 total = 0
     if invest:
         return_invest_ratio = returns_since_entry[-1]/max(invest)
-        print('invested capital {}, return/invest ratio {}'.format(max(invest), return_invest_ratio))
+        print('invested capital {}, return/invest ratio {}'.format(max(invest),
+                                                                   return_invest_ratio))
     else:
         print('no buy transactions, invalid training')
     return return_invest_ratio
@@ -186,9 +187,6 @@ def get_base_return(data):
 
 
 # In[ ]:
-
-
-
 
 
 # In[46]:
@@ -216,7 +214,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
         num_shares = 0
         bought_history = []
         returns_since_entry = [0]
-        days=[0]
+        days = [0]
         for i, val in enumerate(train_data):
             current_adj_close, state = val
             try:
@@ -225,7 +223,8 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
                 break
 
             if len(bought_history) > 0:
-                returns_since_entry.append(get_return_since_entry(bought_history, current_adj_close))
+                returns_since_entry.append(get_return_since_entry(
+                    bought_history, current_adj_close))
             else:
                 returns_since_entry.append(returns_since_entry[-1])
 
@@ -235,7 +234,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
             action = act(state, q, threshold=alpha, actions_size=3)
 
             # get reward
-            if action == 0: # hold
+            if action == 0:  # hold
                 if num_shares > 0:
                     prev_adj_close, _ = train_data[i-1]
                     future = next_adj_close - current_adj_close
@@ -244,12 +243,12 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
                 else:
                     reward = 0
 
-            if action == 1: # buy
+            if action == 1:  # buy
                 reward = 0
                 num_shares += 1
                 bought_history.append((current_adj_close))
 
-            if action == 2: # sell
+            if action == 2:  # sell
                 if num_shares > 0:
                     bought_price = bought_history[0]
                     reward = (current_adj_close - bought_price)
@@ -261,7 +260,8 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
             actions_history.append((i, current_adj_close, action))
 
             # update q table
-            q.loc[state, action] = (1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+            q.loc[state, action] = (
+                1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
     print('End of Training!')
     return q, actions_history, returns_since_entry
 
@@ -275,7 +275,6 @@ def train_q_learning(train_data, q, alpha, gamma, episodes):
 # In[12]:
 
 
-
 # In[18]:
 
 
@@ -285,30 +284,34 @@ def trainqlearner(start_date, end_date, ticker):
     train_df = d.get_stock_data(ticker, start_date, end_date)
 
     # Action Definition (= Q table columns)
-    all_actions = {0:'hold', 1:'buy', 2:'sell'}
+    all_actions = {0: 'hold', 1: 'buy', 2: 'sell'}
 
     # create_df = normalized predictors norm_bb_width, norm_adj_close, norm_close_sma_ratio
     train_df = d.create_df(train_df, 3)
 
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
-
-    bb_states_value, close_sma_ratio_states_value = d.get_states(train_df)
+    percent_b_states_values, close_sma_ratio_states_value = d.get_states(
+        train_df)
 
     # Create_state_df =  Add state information to the DF
-    train_df = d.create_state_df(train_df, bb_states_value, close_sma_ratio_states_value)
+    train_df = d.create_state_df(
+        train_df, percent_b_states_values, close_sma_ratio_states_value)
+    #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
 
     # Return a list of strings representing the combination of all the states
-    all_states = d.get_all_states(bb_states_value, close_sma_ratio_states_value)
+    all_states = d.get_all_states(
+        percent_b_states_values, close_sma_ratio_states_value)
+    # all_states = d.get_all_states(None, percent_b_states_values, close_sma_ratio_states_value)
     states_size = len(all_states)
-
 
     # Preparation of the Q Table
     q_init = initialize_q_mat(all_states, all_actions)/1e9
     train_data = np.array(train_df[['norm_adj_close', 'state']])
-    q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q_init, alpha=0.8, gamma=0.95, episodes=1)
+    q, train_actions_history, train_returns_since_entry = train_q_learning(
+        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1)
 
     # Specify quantiles
-    BB_quantiles = bb_states_value
+    BB_quantiles = percent_b_states_values
     SMA_ratio_quantiles = close_sma_ratio_states_value
 
-    return q, bb_states_value, SMA_ratio_quantiles
+    return q, percent_b_states_values, SMA_ratio_quantiles
