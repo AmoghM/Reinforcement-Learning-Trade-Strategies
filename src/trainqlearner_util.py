@@ -206,6 +206,9 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
     actions_history(dict): has everydays' actions and close price
     returns_since_entry(list): contains every day's return since entry
     '''
+    # create framework for episode-to-episode Q table change tracking; will track MSE between episodes
+    q_cur = q.copy()
+    errs = []
     
     for ii in range(episodes):
         episode +=1
@@ -215,6 +218,8 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         bought_history = []
         returns_since_entry = [0]
         days = [0]
+        
+        
         for i, val in enumerate(train_data):
             current_adj_close, state = val
             try:
@@ -262,7 +267,26 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
             # update q table
             q.loc[state, action] = (
                 1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+            
+            # calculate MSE between epsiodes
+            q_last = q_cur.copy()
+            q_cur = q.copy()
+            
+        # update MSE tracking
+        MSE = np.sum(np.square(q_cur - q_last).values)
+        
+        errs += [MSE]
+            
     print('End of Training!')
+    
+    # plot MSE
+    plt.figure(figsize=(14,8))
+    plt.title('Q Table Stabilization By Episode',size=25)
+    plt.xlabel('Episode Number',size=20)
+    plt.ylabel('Mean Squared Difference Between Current & Last QTable')
+    x_axis = np.array([i+1 for i in range(len(errs))])
+    plt.plot(x_axis,errs)
+    
     return q, actions_history, returns_since_entry
 
 

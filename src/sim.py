@@ -747,13 +747,13 @@ def return_stats(stock='jpm',
         sell_df = df[df.actions == 'SELL']
         hold_df = df[df.actions == 'HOLD']
         plt.plot(results[policy.__name__]['final_vals'],label =policy.__name__)
-        plt.scatter(buy_df.index, buy_df['final_vals'], color='orange',s=10)
-        plt.scatter(sell_df.index, sell_df['final_vals'], color='black',s=10)
-        plt.scatter(hold_df.index, hold_df['final_vals'], color='red',s=10)
+        plt.scatter(buy_df.index, buy_df['final_vals'], color='orange',marker='^',s=10)
+        plt.scatter(sell_df.index, sell_df['final_vals'], color='black',marker='v',s=10)
+        plt.scatter(hold_df.index, hold_df['final_vals'], color='red',marker='s',s=10)
         plt.xlabel("Date",fontsize=20)
         plt.ylabel("Portfolio Value ($)",fontsize=20)
         plt.title("Daily Portfolio Values For Trading Strategies of "+ policy.__name__ +" for stock : "+stock.upper(),fontsize=25)
-        plt.legend()
+        plt.legend(['orange','black','red'],['^','v','s'])
         plt.show()
 
     # display percentages
