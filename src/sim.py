@@ -652,7 +652,7 @@ def return_stats(stock='jpm',
 
             plt.figure(figsize=(9,7))
             fig = heatmap(qtab_sma,cmap='Blues')
-            plt.title('Simple Moving Average Q-Table',size=16)
+            plt.title('SMA Percentage Q-Table',size=16)
             plt.gca().hlines([i+1 for i in range(len(qtab_sma.index))],xmin=0,xmax=10,linewidth=10,color='white')
             plt.xticks(fontsize=15)
             plt.yticks(fontsize=14,rotation=0)

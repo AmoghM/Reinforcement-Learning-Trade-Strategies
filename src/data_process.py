@@ -141,19 +141,25 @@ def get_adj_close_sma_ratio(values, window):
     ratio = values/rm
     return ratio.apply(lambda x: round(x, 5))
 
-def get_mrdr(values,baseline):
+def get_mrdr(values,baseline,test=True):
     '''
     Returns the market relative daily return over the window:
     INPUTS:
     values(pandas series)
-    window(int): time period to consider - 
+    window(int): time period to consider 
+    test(bool): whether this is testing period (and only the past few days' data is needed) - this flag will speed up testing
     OUTPUTS:
     market relative daily return(series)
     '''
-
-    valnew = values.iloc[-3:]
-    mx = valnew.index.max()
-    gspc_temp = baseline[baseline.index <= mx].iloc[-3:]
+    if test:
+        valnew = values.iloc[-3:]
+        mx = valnew.index.max()
+        gspc_temp = baseline[baseline.index <= mx].iloc[-3:]
+        
+    else:
+        valnew = values
+        mx = valnew.index.max()
+        gspc_temp = baseline[baseline.index <= mx]
     
     gspc = gspc_temp.reindex(valnew.index).fillna(method='ffill')
 
@@ -228,7 +234,7 @@ def create_df(df, window=3):
     upper, lower = get_upper_lower_bands(df['Adj Close'], window)
     # get mrdr
     baseline = read_stock('^GSPC','2007-01-01','2016-12-31')
-    mrdr = get_mrdr(df['Adj Close'],baseline)
+    mrdr = get_mrdr(df['Adj Close'],baseline,test=False)
 
     # create bb measure, close-sma-ratio columns
     df['close_sma_ratio'] = close_sma_ratio
@@ -331,6 +337,8 @@ def weighted_average_and_normalize(qtable,state_history,state_num,quantile_lengt
     quantile_length: the number of quantiles we built this out with
     '''
     qtab_2 = pd.merge(qtable,pd.Series(state_history,name='state_history'),'inner',left_index=True,right_index=True)
+    
+    # reverse normalization: qtab_2['state_history'] = 1/qtab_2['state_history']
     
     sh = qtab_2['state_history']
     qtab_2 = qtab_2.drop(columns=['state_history']).multiply(qtab_2['state_history'],axis=0)
