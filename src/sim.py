@@ -753,7 +753,7 @@ def return_stats(stock='jpm',
         plt.xlabel("Date",fontsize=20)
         plt.ylabel("Portfolio Value ($)",fontsize=20)
         plt.title("Daily Portfolio Values For Trading Strategies of "+ policy.__name__ +" for stock : "+stock.upper(),fontsize=25)
-        plt.legend(['orange','black','red'],['^','v','s'])
+        plt.legend()
         plt.show()
 
     # display percentages
