@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
 import time
 import datetime
 import numpy as np
@@ -11,13 +6,6 @@ import matplotlib.pyplot as plt
 import data_process as d
 import pandas_datareader.data as web  # fetch stock data
 import seaborn as sns
-
-# get_ipython().magic('matplotlib inline')
-
-
-# ### Q table initialization
-
-# In[6]:
 
 
 def initialize_q_mat(all_states, all_actions):
@@ -40,12 +28,6 @@ def initialize_q_mat(all_states, all_actions):
 
     return q_mat
 
-
-# ### Generate action signal (0:sit, 1:buy, 2:sell) based on the action policy
-
-# In[31]:
-
-
 def act(state, q_mat, threshold=0.2, actions_size=3):
     '''
     Taking an action based on different strategies:
@@ -64,11 +46,6 @@ def act(state, q_mat, threshold=0.2, actions_size=3):
     else:
         action = np.argmax(q_mat.loc[state].values)
     return action
-
-
-# ### Additional utility functions
-
-# In[34]:
 
 
 def get_return_since_entry(bought_history, current_adj_close):
@@ -131,10 +108,6 @@ def visualize_results(actions_history, returns_since_entry):
     ax2.scatter(sell_d, sell_p, color='red', label='sell')
     ax2.legend()
 
-
-# In[37]:
-
-
 def get_invested_capital(actions_history, returns_since_entry):
     '''
     Calculate the max capital being continously invested by the trader
@@ -168,10 +141,6 @@ def get_invested_capital(actions_history, returns_since_entry):
         print('no buy transactions, invalid training')
     return return_invest_ratio
 
-
-# In[38]:
-
-
 def get_base_return(data):
     '''
     Calculate the benchmark returns of a given stock
@@ -184,14 +153,7 @@ def get_base_return(data):
     end_price, _ = data[-1]
     return (end_price - start_price)/start_price
 
-
-# In[ ]:
-
-
-# In[46]:
-
-
-def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
+def train_q_learning(train_data, q, alpha, gamma, episodes,commission,sell_penalty):
     episode = 0
     '''
     Train a Q-table
@@ -221,6 +183,10 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         returns_since_entry = [0]
         days = [0]
         
+        # add convergence tracking for episode 1
+        if episode == 1:
+            errs_1 = []
+            q_cur_1 = q.copy()
         
         for i, val in enumerate(train_data):
             current_adj_close, state = val
@@ -263,12 +229,30 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
                     num_shares -= 1
 
                 else:
-                    reward = 0 #this was originally -100
+                    reward = 0 - sell_penalty
             actions_history.append((i, current_adj_close, action))
 
             # update q table
             q.loc[state, action] = (
                 1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+            
+            q_last_1 = q_cur_1.copy()
+            q_cur_1 = q.copy()
+            
+            # add convergence tracking for episode 1
+            if episode == 1:
+                MSE_1 = np.sum(np.square(q_cur_1-q_last_1).values)
+                errs_1 += [MSE_1]
+            
+        # add convergence tracking for episode 1
+        if episode == 1:
+            plt.figure(figsize=(14,8))
+            plt.title('Q Table Stabilization Within Episode 1',size=25)
+            plt.xlabel('Day Number',size=20)
+            plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+            x_axis = np.array([i+1 for i in range(len(errs_1))])
+            plt.plot(x_axis,errs_1)
+            plt.show()
             
         # calculate MSE between epsiodes
         q_last = q_cur.copy()
@@ -277,22 +261,18 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         # update MSE tracking
         MSE = np.sum(np.square(q_cur - q_last).values)
         
-        if MSE > 1e-7 and episode > 5:
-            
-            print('Episode ' + str(episode) + ' showed irregularity. MSE was ' + str(MSE) + '. Showing big differences below.')
-            tmp = q_cur - q_last
-            tmp = tmp[tmp.abs().sum(axis=1) > 0]
-            print(tmp)
-            print('\n\n\n\n')
-            '''
-            q_diff = (q_cur - q_last).copy()
-            q_diff['colsum'] = q_diff.sum(axis=1)
-            q_diff = q_diff.sort_values('colsum',ascending=False).iloc[:10]
-            print(q_diff)
-            print('\n\n\n\n')
-            '''
-            
-        
+        # plot irregularities
+        if episode > 1:
+            if MSE > errs[-1]*3:
+
+                print('Episode ' + str(episode) + ' showed irregularity. MSE was ' + str(MSE) + '. Showing big 10 biggest jumps in QTable below.')
+ 
+                q_diff = (q_cur - q_last).copy()
+                q_diff['colsum'] = q_diff.sum(axis=1)
+                q_diff = q_diff.sort_values('colsum',ascending=False).iloc[:10]
+                print(q_diff.drop(columns=['colsum']))
+                print('\n\n\n\n')
+          
         errs += [MSE]
             
     print('End of Training!')
@@ -301,108 +281,36 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
     plt.figure(figsize=(14,8))
     plt.title('Q Table Stabilization By Episode',size=25)
     plt.xlabel('Episode Number',size=20)
-    plt.ylabel('Mean Squared Difference Between Current & Last QTable (ALL Episodes)')
+    plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
     x_axis = np.array([i+1 for i in range(len(errs))])
     plt.plot(x_axis,errs)
     
-    # plot MSE for episodes 1-3
-    if len(errs) > 3:
+    # plot MSE for episodes 1-10
+    if len(errs) >= 10:
         # plot MSE
-        errs_new = errs[:3]
+        errs_new = errs[:10]
         plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Episodes 1-3)',size=25)
+        plt.title('Q Table Stabilization By Episode (Episodes 1-10)',size=25)
         plt.xlabel('Episode Number',size=20)
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+1 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
         
-    # plot MSE for episodes 4-500
-    if len(errs) > 500:
+    # plot MSE for episodes 11-end if possible
+    if len(errs) >= 10:
         # plot MSE
-        errs_new = errs[4:500]
+        errs_new = errs[11:]
         plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Episodes 4-500)',size=25)
+        plt.title('Q Table Stabilization By Episode (Episodes 11-100)',size=25)
         plt.xlabel('Episode Number',size=20)
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+1 for i in range(len(errs_new))])
+        x_axis = np.array([i+11 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
-    
-    # plot MSE beyond third episode
-    if len(errs) > 3:
-        # plot MSE
-        errs_new = errs[3:]
-        plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Beyond Episode 3)',size=25)
-        plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+3 for i in range(len(errs_new))])
-        plt.plot(x_axis,errs_new)
-    
-    # plot MSE beyond 50th episode
-    if len(errs) > 50:
-        # plot MSE
-        errs_new = errs[50:]
-        plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Beyond Episode 50)',size=25)
-        plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+50 for i in range(len(errs_new))])
-        plt.plot(x_axis,errs_new)
-    
-    # plot MSE beyond 100th episode
-    if len(errs) > 100:
-        # plot MSE
-        errs_new = errs[100:]
-        plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Beyond Episode 100)',size=25)
-        plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+100 for i in range(len(errs_new))])
-        plt.plot(x_axis,errs_new)
+      
 
     return q, actions_history, returns_since_entry
 
-    # plot MSE beyond 500th episode
-    if len(errs) > 500:
-        # plot MSE
-        errs_new = errs[500:]
-        plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Beyond Episode 500)',size=25)
-        plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+500 for i in range(len(errs_new))])
-        plt.plot(x_axis,errs_new)
-        
-        
-    # plot MSE beyond 2000th episode
-    if len(errs) > 2000:
-        # plot MSE
-        errs_new = errs[2000:]
-        plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Beyond Episode 2000)',size=25)
-        plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
-        x_axis = np.array([i+2000 for i in range(len(errs_new))])
-        plt.plot(x_axis,errs_new)
-        
-        print(q_cur.idxmax(axis=1))
-
-    return q, actions_history, returns_since_entry
-
-
-# ### Output
-
-# ##### Raw input from Yahoo Finance
-
-# Date Range
-
-# In[12]:
-
-
-# In[18]:
-
-
-def trainqlearner(start_date, end_date, ticker):
+def trainqlearner(start_date, end_date, ticker,alpha=0.8, gamma=0.95, episodes=250,commission=0,sell_penalty=0):
 
     # Split the data into train and test data set
     train_df = d.get_stock_data(ticker, start_date, end_date)
@@ -432,8 +340,9 @@ def trainqlearner(start_date, end_date, ticker):
     q_init = initialize_q_mat(all_states, all_actions)/1e9
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
+    
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=0.8, gamma=0.95, episodes=5000,commission=0)
+        train_data, q_init, alpha=alpha, gamma=gamma, episodes=episodes,commission=commission,sell_penalty=sell_penalty)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values
