@@ -296,10 +296,57 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 3)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable')
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+3 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
     
+    # plot MSE beyond 100th episode
+    if len(errs) > 50:
+        # plot MSE
+        errs_new = errs[50:]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Beyond Episode 50)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+        x_axis = np.array([i+50 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
+    
+    # plot MSE beyond 100th episode
+    if len(errs) > 100:
+        # plot MSE
+        errs_new = errs[100:]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Beyond Episode 100)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+        x_axis = np.array([i+100 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
+
+    return q, actions_history, returns_since_entry
+
+    # plot MSE beyond 500th episode
+    if len(errs) > 500:
+        # plot MSE
+        errs_new = errs[500:]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Beyond Episode 500)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+        x_axis = np.array([i+500 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
+        
+        
+    # plot MSE beyond 2000th episode
+    if len(errs) > 2000:
+        # plot MSE
+        errs_new = errs[2000:]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Beyond Episode 2000)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+        x_axis = np.array([i+2000 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
+
     return q, actions_history, returns_since_entry
 
 
@@ -346,7 +393,7 @@ def trainqlearner(start_date, end_date, ticker):
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1000,commission=2)
+        train_data, q_init, alpha=0.8, gamma=0.95, episodes=5000,commission=2)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values
