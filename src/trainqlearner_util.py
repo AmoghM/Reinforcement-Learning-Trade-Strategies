@@ -209,10 +209,12 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
     # create framework for episode-to-episode Q table change tracking; will track MSE between episodes
     q_cur = q.copy()
     errs = []
+    episode_decile = episodes//10
     
     for ii in range(episodes):
         episode +=1
-        print('Training episode {}'.format(episode))
+        if episode == 1 or episode%episode_decile == 0 or episode == episodes:
+            print('Training episode {}'.format(episode))
         actions_history = []
         num_shares = 0
         bought_history = []
@@ -268,9 +270,9 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
             q.loc[state, action] = (
                 1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
             
-            # calculate MSE between epsiodes
-            q_last = q_cur.copy()
-            q_cur = q.copy()
+        # calculate MSE between epsiodes
+        q_last = q_cur.copy()
+        q_cur = q.copy()
             
         # update MSE tracking
         MSE = np.sum(np.square(q_cur - q_last).values)
@@ -286,6 +288,17 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
     plt.ylabel('Mean Squared Difference Between Current & Last QTable')
     x_axis = np.array([i+1 for i in range(len(errs))])
     plt.plot(x_axis,errs)
+    
+    # plot MSE beyond third episode
+    if len(errs) > 3:
+        # plot MSE
+        errs_new = errs[3:]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Beyond Episode 3)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable')
+        x_axis = np.array([i+3 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
     
     return q, actions_history, returns_since_entry
 
@@ -333,7 +346,7 @@ def trainqlearner(start_date, end_date, ticker):
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=0.8, gamma=0.95, episodes=25,commission=2)
+        train_data, q_init, alpha=0.8, gamma=0.95, episodes=1000,commission=2)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values
