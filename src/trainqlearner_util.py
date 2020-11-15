@@ -261,7 +261,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
                     num_shares -= 1
 
                 else:
-                    reward = -100
+                    reward = 0 #this was originally -100
             actions_history.append((i, current_adj_close, action))
 
             # update q table
