@@ -296,7 +296,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 3)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=18)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+3 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
     
@@ -307,7 +307,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 50)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=18)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+50 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
     
@@ -318,7 +318,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 100)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=18)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+100 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
 
@@ -331,7 +331,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 500)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=18)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+500 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
         
@@ -343,7 +343,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.figure(figsize=(14,8))
         plt.title('Q Table Stabilization By Episode (Beyond Episode 2000)',size=25)
         plt.xlabel('Episode Number',size=20)
-        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=18)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+2000 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
 
