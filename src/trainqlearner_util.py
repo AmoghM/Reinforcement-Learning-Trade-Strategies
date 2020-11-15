@@ -301,16 +301,27 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
     plt.figure(figsize=(14,8))
     plt.title('Q Table Stabilization By Episode',size=25)
     plt.xlabel('Episode Number',size=20)
-    plt.ylabel('Mean Squared Difference Between Current & Last QTable')
+    plt.ylabel('Mean Squared Difference Between Current & Last QTable (ALL Episodes)')
     x_axis = np.array([i+1 for i in range(len(errs))])
     plt.plot(x_axis,errs)
     
-     # plot MSE beyond third episode
-    if len(errs) > 5:
+    # plot MSE for episodes 1-3
+    if len(errs) > 3:
         # plot MSE
-        errs_new = errs[:5]
+        errs_new = errs[:3]
         plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Episodes 1-5)',size=25)
+        plt.title('Q Table Stabilization By Episode (Episodes 1-3)',size=25)
+        plt.xlabel('Episode Number',size=20)
+        plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+        x_axis = np.array([i+1 for i in range(len(errs_new))])
+        plt.plot(x_axis,errs_new)
+        
+    # plot MSE for episodes 4-500
+    if len(errs) > 500:
+        # plot MSE
+        errs_new = errs[4:500]
+        plt.figure(figsize=(14,8))
+        plt.title('Q Table Stabilization By Episode (Episodes 4-500)',size=25)
         plt.xlabel('Episode Number',size=20)
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+1 for i in range(len(errs_new))])
@@ -327,7 +338,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         x_axis = np.array([i+3 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
     
-    # plot MSE beyond 100th episode
+    # plot MSE beyond 50th episode
     if len(errs) > 50:
         # plot MSE
         errs_new = errs[50:]
@@ -373,6 +384,8 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission):
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+2000 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
+        
+        print(q_cur.idxmax(axis=1))
 
     return q, actions_history, returns_since_entry
 
