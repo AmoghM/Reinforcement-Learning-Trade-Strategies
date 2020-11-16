@@ -28,7 +28,7 @@ def initialize_q_mat(all_states, all_actions):
 
     return q_mat
 
-def act(state, q_mat, threshold=0.2, actions_size=3):
+def act(state, q_mat, threshold, actions_size=3):
     '''
     Taking an action based on different strategies:
     either random pick actions or take the actions
@@ -153,14 +153,15 @@ def get_base_return(data):
     end_price, _ = data[-1]
     return (end_price - start_price)/start_price
 
-def train_q_learning(train_data, q, alpha, gamma, episodes,commission,sell_penalty):
+def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episodes,commission,sell_penalty):
     episode = 0
     '''
     Train a Q-table
     Inputs:
     train_data(dataframe)
     q(dataframe): initial Q-table
-    alpha(float): threshold of which action strategy to take
+    epsilon(float): threshold of which action strategy to take
+    alpha(float): proportion to weight future expected return vs. current return
     gamma(float): discount percentage on the future return
     commission(float): amount charged for stock transaction
     Output:
@@ -202,9 +203,12 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission,sell_penal
                 returns_since_entry.append(returns_since_entry[-1])
 
             # decide action
+            '''
             if alpha > 0.1:
                 alpha = alpha/(i+1)
-            action = act(state, q, threshold=alpha, actions_size=3)
+            '''
+            epsilon*=epsilon_decay
+            action = act(state, q, threshold=epsilon, actions_size=3)
 
             # get reward
             if action == 0:  # hold
@@ -301,7 +305,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission,sell_penal
         # plot MSE
         errs_new = errs[11:]
         plt.figure(figsize=(14,8))
-        plt.title('Q Table Stabilization By Episode (Episodes 11-100)',size=25)
+        plt.title('Q Table Stabilization By Episode (Episodes 11-End)',size=25)
         plt.xlabel('Episode Number',size=20)
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+11 for i in range(len(errs_new))])
@@ -310,7 +314,7 @@ def train_q_learning(train_data, q, alpha, gamma, episodes,commission,sell_penal
 
     return q, actions_history, returns_since_entry
 
-def trainqlearner(start_date, end_date, ticker,alpha=0.8, gamma=0.95, episodes=250,commission=0,sell_penalty=0):
+def trainqlearner(start_date, end_date, ticker,alpha=0.8, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=100,commission=0,sell_penalty=0):
 
     # Split the data into train and test data set
     train_df = d.get_stock_data(ticker, start_date, end_date)
@@ -342,7 +346,7 @@ def trainqlearner(start_date, end_date, ticker,alpha=0.8, gamma=0.95, episodes=2
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     
     q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=alpha, gamma=gamma, episodes=episodes,commission=commission,sell_penalty=sell_penalty)
+        train_data, q_init, alpha=alpha, epsilon=epsilon, epsilon_decay=epsilon_decay,gamma=gamma, episodes=episodes,commission=commission,sell_penalty=sell_penalty)
 
     # Specify quantiles
     BB_quantiles = percent_b_states_values
