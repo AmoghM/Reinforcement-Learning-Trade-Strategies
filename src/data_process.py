@@ -217,7 +217,7 @@ def value_to_state(value, states_value):
         return 'value out of range'
 
 
-def create_df(df, window=3):
+def create_df(df, window=45):
     '''
     Create a dataframe with the normalized predictors
     norm_bb_width, norm_adj_close, norm_close_sma_ratio
@@ -337,8 +337,6 @@ def weighted_average_and_normalize(qtable,state_history,state_num,quantile_lengt
     quantile_length: the number of quantiles we built this out with
     '''
     qtab_2 = pd.merge(qtable,pd.Series(state_history,name='state_history'),'inner',left_index=True,right_index=True)
-    
-    # reverse normalization: qtab_2['state_history'] = 1/qtab_2['state_history']
     
     sh = qtab_2['state_history']
     qtab_2 = qtab_2.drop(columns=['state_history']).multiply(qtab_2['state_history'],axis=0)

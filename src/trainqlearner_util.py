@@ -314,7 +314,7 @@ def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episod
 
     return q, actions_history, returns_since_entry
 
-def trainqlearner(start_date, end_date, ticker,alpha=0.8, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=100,commission=0,sell_penalty=0):
+def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=500,commission=0,sell_penalty=0):
 
     # Split the data into train and test data set
     train_df = d.get_stock_data(ticker, start_date, end_date)
