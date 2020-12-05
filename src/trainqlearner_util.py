@@ -153,42 +153,33 @@ def get_base_return(data):
     end_price, _ = data[-1]
     return (end_price - start_price)/start_price
 
-def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episodes,commission,sell_penalty):
-    episode = 0
+def train_q_learning(train_data, q, gamma, episodes,sh):
     '''
-    Train a Q-table
+    Train a Q-table 
     Inputs:
     train_data(dataframe)
     q(dataframe): initial Q-table
-    epsilon(float): threshold of which action strategy to take
-    alpha(float): proportion to weight future expected return vs. current return
+    alpha(float): threshold of which action strategy to take
     gamma(float): discount percentage on the future return
-    commission(float): amount charged for stock transaction
     Output:
     q(dataframe): Updated Q-table
     actions_history(dict): has everydays' actions and close price
     returns_since_entry(list): contains every day's return since entry
     '''
-    # create framework for episode-to-episode Q table change tracking; will track MSE between episodes
-    q_cur = q.copy()
-    errs = []
-    episode_decile = episodes//10
-    
+    # actions_history = []
+    # num_shares = 0
+    # bought_history = []
+    # returns_since_entry = [0]
+    # cash = 100000
+    alpha = 0.1
     for ii in range(episodes):
-        episode +=1
-        if episode == 1 or episode%episode_decile == 0 or episode == episodes:
-            print('Training episode {}'.format(episode))
         actions_history = []
+        cash = 100000
         num_shares = 0
-        bought_history = []
-        returns_since_entry = [0]
-        days = [0]
-        
-        # add convergence tracking for episode 1
-        if episode == 1:
-            errs_1 = []
-            q_cur_1 = q.copy()
-        
+        if ii > 1:
+          alpha = alpha*0.99995
+        epsilon = 0.8
+        current_portfolio_value = []      
         for i, val in enumerate(train_data):
             current_adj_close, state = val
             try:
@@ -196,58 +187,70 @@ def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episod
             except:
                 break
 
-            if len(bought_history) > 0:
-                returns_since_entry.append(get_return_since_entry(
-                    bought_history, current_adj_close))
-            else:
-                returns_since_entry.append(returns_since_entry[-1])
 
-            # decide action
-            '''
-            if alpha > 0.1:
-                alpha = alpha/(i+1)
-            '''
-            epsilon*=epsilon_decay
+            current_cash_state = value_to_state(cash, cash_states_values)
+            current_share_state = value_to_state(num_shares, shares_states_values)
+            state = state + current_cash_state + current_share_state
+
+
+            if i >=1:
+              epsilon*= 0.9958
+              
             action = act(state, q, threshold=epsilon, actions_size=3)
-
+            
             # get reward
-            if action == 0:  # hold
+            if action == 0: # hold
                 if num_shares > 0:
-                    prev_adj_close, _ = train_data[i-1]
-                    future = next_adj_close - current_adj_close
-                    past = current_adj_close - prev_adj_close
-                    reward = past
+                    next_cash = cash # no change
+                    reward = (cash + num_shares*next_adj_close) - (cash + num_shares*current_adj_close)                
                 else:
                     reward = 0
 
-            if action == 1:  # buy
-                reward = 0-commission
-                num_shares += 1
-                bought_history.append((current_adj_close))
-
-            if action == 2:  # sell
-                if num_shares > 0:
-                    bought_price = bought_history[0]
-                    reward = (current_adj_close - bought_price) - commission
-                    bought_history.pop(0)
-                    num_shares -= 1
-
-                else:
-                    reward = 0 - sell_penalty
-            actions_history.append((i, current_adj_close, action))
-
-            # update q table
-            q.loc[state, action] = (
-                1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+            if action == 1: # buy
+                if cash > sh*current_adj_close:
+                  next_cash = cash - sh*current_adj_close
+                  # reward = (cash - current_adj_close + ((num_shares+1)*next_adj_close)) - (cash + num_shares*current_adj_close)
+                  reward = (next_cash + ((num_shares+sh)*next_adj_close)) - (cash + num_shares*current_adj_close)
+                  num_shares += sh
+                  cash = next_cash
+                else: 
+                  reward = 0
             
+            if action == 2: # sell
+                if num_shares > 0:
+                    next_cash = cash + sh*current_adj_close
+                    # reward = (cash + current_adj_close + ((num_shares-1)*next_adj_close)) - (cash + num_shares*current_adj_close)
+                    reward = (next_cash + ((num_shares-sh)*next_adj_close)) - (cash + num_shares*current_adj_close)
+                    num_shares -= sh
+                    cash = next_cash
+                else:
+                    reward = 0
+
+            #NEXT using cash and share
+
+            #next_cash_state = value_to_state(next_cash,cash_states_values)
+            ## Use 'cash' instead as affect 'current'
+            next_cash_state = value_to_state(cash,cash_states_values)
+            next_share_state = value_to_state(num_shares, shares_states_values)
+            ## Note: cash and num_share are automatically updated in at the end of the Action code block
+            next_state = next_state + next_cash_state + next_share_state
+
+            actions_history.append((i, current_adj_close, action))
+            
+            # update q table
+            q.loc[state, action] = (1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+
+            current_portfolio_value.append(cash + num_shares*next_adj_close)
+
+            # ---- (tentative) start of q-table info plotting/output -----
             q_last_1 = q_cur_1.copy()
             q_cur_1 = q.copy()
             
             # add convergence tracking for episode 1
             if episode == 1:
                 MSE_1 = np.sum(np.square(q_cur_1-q_last_1).values)
-                errs_1 += [MSE_1]
-            
+                errs_1 += [MSE_1] 
+
         # add convergence tracking for episode 1
         if episode == 1:
             plt.figure(figsize=(14,8))
@@ -310,12 +313,174 @@ def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episod
         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
         x_axis = np.array([i+11 for i in range(len(errs_new))])
         plt.plot(x_axis,errs_new)
+
+    return q, actions_history, current_portfolio_value
+
+
+# def train_q_learning(train_data, q, alpha, epsilon, epsilon_decay, gamma, episodes,commission,sell_penalty):
+#     episode = 0
+#     '''
+#     Train a Q-table
+#     Inputs:
+#     train_data(dataframe)
+#     q(dataframe): initial Q-table
+#     epsilon(float): threshold of which action strategy to take
+#     alpha(float): proportion to weight future expected return vs. current return
+#     gamma(float): discount percentage on the future return
+#     commission(float): amount charged for stock transaction
+#     Output:
+#     q(dataframe): Updated Q-table
+#     actions_history(dict): has everydays' actions and close price
+#     returns_since_entry(list): contains every day's return since entry
+#     '''
+#     # create framework for episode-to-episode Q table change tracking; will track MSE between episodes
+#     q_cur = q.copy()
+#     errs = []
+#     episode_decile = episodes//10
+    
+#     for ii in range(episodes):
+#         episode +=1
+#         if episode == 1 or episode%episode_decile == 0 or episode == episodes:
+#             print('Training episode {}'.format(episode))
+#         actions_history = []
+#         num_shares = 0
+#         bought_history = []
+#         returns_since_entry = [0]
+#         days = [0]
+        
+#         # add convergence tracking for episode 1
+#         if episode == 1:
+#             errs_1 = []
+#             q_cur_1 = q.copy()
+        
+#         for i, val in enumerate(train_data):
+#             current_adj_close, state = val
+#             try:
+#                 next_adj_close, next_state = train_data[i+1]
+#             except:
+#                 break
+
+#             if len(bought_history) > 0:
+#                 returns_since_entry.append(get_return_since_entry(
+#                     bought_history, current_adj_close))
+#             else:
+#                 returns_since_entry.append(returns_since_entry[-1])
+
+#             # decide action
+#             '''
+#             if alpha > 0.1:
+#                 alpha = alpha/(i+1)
+#             '''
+#             epsilon*=epsilon_decay
+#             action = act(state, q, threshold=epsilon, actions_size=3)
+
+#             # get reward
+#             if action == 0:  # hold
+#                 if num_shares > 0:
+#                     prev_adj_close, _ = train_data[i-1]
+#                     future = next_adj_close - current_adj_close
+#                     past = current_adj_close - prev_adj_close
+#                     reward = past
+#                 else:
+#                     reward = 0
+
+#             if action == 1:  # buy
+#                 reward = 0-commission
+#                 num_shares += 1
+#                 bought_history.append((current_adj_close))
+
+#             if action == 2:  # sell
+#                 if num_shares > 0:
+#                     bought_price = bought_history[0]
+#                     reward = (current_adj_close - bought_price) - commission
+#                     bought_history.pop(0)
+#                     num_shares -= 1
+
+#                 else:
+#                     reward = 0 - sell_penalty
+#             actions_history.append((i, current_adj_close, action))
+
+#             # update q table
+#             q.loc[state, action] = (
+#                 1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
+            
+#             # ---- (tentative) start of q-table info plotting/output -----
+#             q_last_1 = q_cur_1.copy()
+#             q_cur_1 = q.copy()
+            
+#             # add convergence tracking for episode 1
+#             if episode == 1:
+#                 MSE_1 = np.sum(np.square(q_cur_1-q_last_1).values)
+#                 errs_1 += [MSE_1]
+            
+#         # add convergence tracking for episode 1
+#         if episode == 1:
+#             plt.figure(figsize=(14,8))
+#             plt.title('Q Table Stabilization Within Episode 1',size=25)
+#             plt.xlabel('Day Number',size=20)
+#             plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+#             x_axis = np.array([i+1 for i in range(len(errs_1))])
+#             plt.plot(x_axis,errs_1)
+#             plt.show()
+            
+#         # calculate MSE between epsiodes
+#         q_last = q_cur.copy()
+#         q_cur = q.copy()
+            
+#         # update MSE tracking
+#         MSE = np.sum(np.square(q_cur - q_last).values)
+        
+#         # plot irregularities
+#         if episode > 1:
+#             if MSE > errs[-1]*3:
+
+#                 print('Episode ' + str(episode) + ' showed irregularity. MSE was ' + str(MSE) + '. Showing big 10 biggest jumps in QTable below.')
+ 
+#                 q_diff = (q_cur - q_last).copy()
+#                 q_diff['colsum'] = q_diff.sum(axis=1)
+#                 q_diff = q_diff.sort_values('colsum',ascending=False).iloc[:10]
+#                 print(q_diff.drop(columns=['colsum']))
+#                 print('\n\n\n\n')
+          
+#         errs += [MSE]
+            
+#     print('End of Training!')
+    
+#     # plot MSE
+#     plt.figure(figsize=(14,8))
+#     plt.title('Q Table Stabilization By Episode',size=25)
+#     plt.xlabel('Episode Number',size=20)
+#     plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+#     x_axis = np.array([i+1 for i in range(len(errs))])
+#     plt.plot(x_axis,errs)
+    
+#     # plot MSE for episodes 1-10
+#     if len(errs) >= 10:
+#         # plot MSE
+#         errs_new = errs[:10]
+#         plt.figure(figsize=(14,8))
+#         plt.title('Q Table Stabilization By Episode (Episodes 1-10)',size=25)
+#         plt.xlabel('Episode Number',size=20)
+#         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+#         x_axis = np.array([i+1 for i in range(len(errs_new))])
+#         plt.plot(x_axis,errs_new)
+        
+#     # plot MSE for episodes 11-end if possible
+#     if len(errs) >= 10:
+#         # plot MSE
+#         errs_new = errs[11:]
+#         plt.figure(figsize=(14,8))
+#         plt.title('Q Table Stabilization By Episode (Episodes 11-End)',size=25)
+#         plt.xlabel('Episode Number',size=20)
+#         plt.ylabel('Mean Squared Difference Between Current & Last QTable',size=14)
+#         x_axis = np.array([i+11 for i in range(len(errs_new))])
+#         plt.plot(x_axis,errs_new)
       
 
-    return q, actions_history, returns_since_entry
+#     return q, actions_history, returns_since_entry
 
-def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=500,commission=0,sell_penalty=0):
-
+#def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=500,commission=0,sell_penalty=0):
+def trainqlearner(train_data, q, gamma=0.95, episodes=200, sh = 50)
     # Split the data into train and test data set
     train_df = d.get_stock_data(ticker, start_date, end_date)
 
@@ -326,17 +491,16 @@ def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_
     train_df = d.create_df(train_df, 3)
 
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
-    percent_b_states_values, close_sma_ratio_states_value, mrdr_value = d.get_states(
+    percent_b_states_values, close_sma_ratio_states_value = d.get_states(
         train_df)
 
     # Create_state_df =  Add state information to the DF
     train_df = d.create_state_df(
-        train_df, percent_b_states_values, close_sma_ratio_states_value,mrdr_value)
+        train_df, percent_b_states_values, close_sma_ratio_states_value)
     #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
 
     # Return a list of strings representing the combination of all the states
-    all_states = d.get_all_states(
-        percent_b_states_values, close_sma_ratio_states_value, mrdr_value)
+    all_states = get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values)
     # all_states = d.get_all_states(None, percent_b_states_values, close_sma_ratio_states_value)
     states_size = len(all_states)
 
@@ -345,12 +509,10 @@ def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     
-    q, train_actions_history, train_returns_since_entry = train_q_learning(
-        train_data, q_init, alpha=alpha, epsilon=epsilon, epsilon_decay=epsilon_decay,gamma=gamma, episodes=episodes,commission=commission,sell_penalty=sell_penalty)
-
+    q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q, gamma=0.95, episodes=200, sh = 50)
     # Specify quantiles
     BB_quantiles = percent_b_states_values
     SMA_ratio_quantiles = close_sma_ratio_states_value
-    MRDR_quantiles = mrdr_value
+    cash_quantiles, holdings_quantiles = d.create_cash_and_holdings_quantiles()
 
-    return q, percent_b_states_values, SMA_ratio_quantiles, MRDR_quantiles
+    return q, percent_b_states_values, SMA_ratio_quantiles, cash_quantiles, holdings_quantiles

@@ -141,43 +141,6 @@ def get_adj_close_sma_ratio(values, window):
     ratio = values/rm
     return ratio.apply(lambda x: round(x, 5))
 
-def get_mrdr(values,baseline,test=True):
-    '''
-    Returns the market relative daily return over the window:
-    INPUTS:
-    values(pandas series)
-    window(int): time period to consider 
-    test(bool): whether this is testing period (and only the past few days' data is needed) - this flag will speed up testing
-    OUTPUTS:
-    market relative daily return(series)
-    '''
-    if test:
-        valnew = values.iloc[-3:]
-        mx = valnew.index.max()
-        gspc_temp = baseline[baseline.index <= mx].iloc[-3:]
-        
-    else:
-        valnew = values
-        mx = valnew.index.max()
-        gspc_temp = baseline[baseline.index <= mx]
-    
-    gspc = gspc_temp.reindex(valnew.index).fillna(method='ffill')
-
-    checkhist(gspc,valnew)
-    
-    if not gspc.index.equals(valnew.index):
-        raise ValueError('Stock indecies do not match')
-    
-    gspc_rets = returns(gspc)
-    stock_rets = returns(valnew)
-    
-    mrdr = stock_rets / gspc_rets
-    
-    if not gspc.index.equals(valnew.index) and values.index[-1] == mrdr.index[-1]:
-        raise ValueError('Stock indecies do not match')
-    
-    return mrdr
-
 
 def discretize(values, num_states=4):
     '''
@@ -198,6 +161,26 @@ def discretize(values, num_states=4):
     states_value[num_states] = float('inf')
     return states_value
 
+def create_cash_and_holdings_quantiles():
+    # CASH (State 3)
+    cash_list = [*range(1,10)]
+    cash_list = [int(180000/9)*each for each in cash_list]
+
+    cash_states_values = {}
+    for i in range(len(cash_list)):
+    cash_states_values[i] = cash_list[i]
+    cash_states_values[9] = float("inf")
+
+    # HOLDINGS = Num Shares (State 4)
+    shares_list = [*range(1,10)]
+    shares_list = [int(252/9)*each for each in shares_list]
+
+    shares_states_values = {}
+    for i in range(len(shares_list)):
+    shares_states_values[i] = shares_list[i]
+    shares_states_values[9] = float("inf")
+
+    return cash_states_values, shares_states_values
 
 def value_to_state(value, states_value):
     '''
@@ -232,15 +215,12 @@ def create_df(df, window=45):
     close_sma_ratio = get_adj_close_sma_ratio(df['Adj Close'], window)
     # get the upper and lower BB values
     upper, lower = get_upper_lower_bands(df['Adj Close'], window)
-    # get mrdr
     baseline = read_stock('^GSPC','2007-01-01','2016-12-31')
-    mrdr = get_mrdr(df['Adj Close'],baseline,test=False)
 
     # create bb measure, close-sma-ratio columns
     df['close_sma_ratio'] = close_sma_ratio
     df['upper_bb'] = upper
     df['lower_bb'] = lower
-    df['mrdr'] = mrdr
     
     # drop missing values
     df.dropna(inplace=True)
@@ -276,13 +256,11 @@ def get_states(df):
     }
 
     close_sma_ratio_states_value = discretize(df['norm_close_sma_ratio'])
-
-    mrdr_value = discretize(df['mrdr'])
     
-    return percent_b_states_values, close_sma_ratio_states_value, mrdr_value
+    return percent_b_states_values, close_sma_ratio_states_value
 
 
-def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value,mrdr_value):
+def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
     '''
     Add a new column to hold the state information to the dataframe
     Inputs:
@@ -293,20 +271,17 @@ def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value,mr
     Output:
     df(dataframe)
     '''
-    df['percent_b_state'] = df['percent_b'].apply(
-        lambda x: value_to_state(x, percent_b_states_values))
-    df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(
-        lambda x: value_to_state(x, close_sma_ratio_states_value))
-    df['mrdr_state'] = df['mrdr'].apply(
-        lambda x: value_to_state(x, mrdr_value))
-
-    df['state'] = df['norm_close_sma_ratio_state'] + df['percent_b_state'] + df['mrdr_state']
-
+    #df['norm_bb_width_state'] = df['norm_bb_width'].apply(lambda x : value_to_state(x, bb_states_value)) #2 
+    df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(lambda x : value_to_state(x, close_sma_ratio_states_value))
+    df['percent_b_state'] = df['percent_b'].apply(lambda x : value_to_state(x, percent_b_states_values))
+    #df['norm_adj_close_state'] = df['norm_adj_close'].apply(lambda x : value_to_state(x, price_states_value))
+    
+    #df['state'] = df['norm_close_sma_ratio_state'] + df['norm_bb_width_state']
+    df['state'] = df['norm_close_sma_ratio_state'] + df['percent_b_state']
     df.dropna(inplace=True)
     return df
 
-
-def get_all_states(percent_b_states_values, close_sma_ratio_states_value,mrdr_value):
+def get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values):
     '''
     Combine all the states from the discretized 
     norm_adj_close, norm_close_sma_ratio columns.
@@ -320,10 +295,11 @@ def get_all_states(percent_b_states_values, close_sma_ratio_states_value,mrdr_va
     states = []
     for c, _ in close_sma_ratio_states_value.items():
         for b, _ in percent_b_states_values.items():
-            for m, _ in mrdr_value.items():
-                state = str(c) + str(b) + str(m)
-                states.append(str(state))
-
+          for m, _ in cash_states_values.items():
+            for s, _ in shares_states_values.items(): 
+              state =  str(c) + str(b) + str(m) + str(s)
+              states.append(str(state))
+    
     return states
 
 def weighted_average_and_normalize(qtable,state_history,state_num,quantile_length):

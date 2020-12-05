@@ -16,7 +16,7 @@ import pandas_datareader.data as web # fetch stock data
 #TODO: make this a single function call
 ticker = 'JPM'
 
-np.random.seed(0)
+np.random.seed(1000)
 start = '2017-01-01'
 end = '2019-12-31'
 
@@ -26,10 +26,14 @@ end_date = dt.datetime(2016, 12, 31)
 q, bb_states_value, SMA_ratio_quantiles, MRDR_values = tu.trainqlearner(start_date, end_date, ticker)
 q.columns = ['HOLD', 'BUY', 'SELL']
 bb_ = list(bb_states_value.values())
+
+print(bb_)
+
 sma_ = list(SMA_ratio_quantiles.values())
 mrdr_ = list(MRDR_values.values())
 
 # Fixing the range problem
+
 # q.iloc[0] = q.iloc[0] * 1e-16
 #nq = (q - q.mean()) / q.std()
 nq=q
@@ -297,6 +301,90 @@ def rule_based(stock_table,money,inc, original_shares,commission):
     return results
 
 
+# function to buy stock every day
+def buy_always(stock_table,money,inc,original_shares,commission):
+    '''
+    enacts buy_always strategy
+
+    Inputs
+    stock_table: list of daily stock or portfolio values
+    money: original cash held
+    inc: increment of buy/sell permitted
+    original_shares: original number of shares held
+
+    Output
+    results: dictionary holding...
+        *one Pandas series each (key/Series names are identical) for*
+        final_vals: final daily values of portfolio
+        actions: daily actions taken ("BUY" "SELL" "HOLD")
+        shares: daily number of shares of stock held
+        cash: daily amount of cash held
+
+        *additionally*
+        qtable: returns None (does not apply to this strategy)
+    '''
+
+    # record original value
+    original_val = money + (stock_table.values[0]*original_shares) # initial cash
+
+    # generate table of returns
+    ret = returns(stock_table)
+
+    # create actions table
+    actions = ['HOLD']
+
+    # create shares table
+    shares = stock_table.copy()
+    shares.iloc[0] = original_shares
+    
+    # create markov transition matrix
+    markov = pd.DataFrame(np.zeros((3,3)),index=action_list,columns=action_list)
+
+    # create cash table
+    cash = stock_table.copy()
+    cash.iloc[0] = money
+
+    # calculate daily portfolio value
+    final_vals = stock_table.copy()
+    final_vals.iloc[0] = original_val
+
+    # iterate through days
+    for i in range(1,stock_table.shape[0]):
+        j = i-1 # last day
+        cur_cash = cash.values[j] # current cash
+        cur_shares = shares.values[j] # current shares
+        final_vals.iloc[i] = cur_cash + (cur_shares*stock_table.values[i]) # end of day portfolio value
+        cur_price = stock_table.values[j]
+
+        # if you can't buy, hold
+        if cur_cash < (cur_price*inc):
+            act = 'HOLD'
+	
+	# else buy
+        else:
+            act = 'BUY'
+
+        # take action
+        if act == 'HOLD':
+            cash.iloc[i] = cash.values[j]
+            shares.iloc[i] = shares.values[j]
+        if act == 'BUY':
+            cash.iloc[i] = cash.values[j] - (inc*cur_price) - commission
+            shares.iloc[i] = shares.values[j] + inc
+  
+        actions += [act]
+        
+        # increment markov
+        markov.loc[actions[j],actions[i]] +=1
+
+    actions = pd.Series(actions,index=stock_table.index)
+    
+    # normalize markov
+    markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
+
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov,'state_history':None}
+    return results
+
 # function to choose action based on OLS of returns looking back to trading days t-6 to t-1
 def ols(stock_table,money,inc, original_shares,commission):
     '''
@@ -412,7 +500,7 @@ def ols(stock_table,money,inc, original_shares,commission):
     return results
 
 # def qlearner(stock_table,money,inc, original_shares,qtable=ql[0], BB_quantiles=ql[1], SMA_quantiles=ql[2],window=window):
-def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, MRDR_quantiles=mrdr_, window=3): # defining defaults here prevents need for args to be passed in return_stats function
+def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, MRDR_quantiles=mrdr_, window=5): # defining defaults here prevents need for args to be passed in return_stats function
     '''
     Enacts qlearning
 
@@ -439,6 +527,8 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
     '''
 
     # record original value
+    print(stock_table[1])
+
     original_val = money + (stock_table.values[0]*original_shares) # initial cash
 
     # generate table of returns
@@ -479,13 +569,18 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
         if i > window: # if we have enough of a lookback window to calculate stats
 
             # find yesterday's final bollinger band value
-            bb = d.get_bollinger_bands(stock_table.iloc[:i],window).iloc[j]
+            upper, lower = d.get_upper_lower_bands(stock_table.iloc[:i], window)
+            bb = ((stock_table.iloc[:i] - lower) * 100 / (upper - lower)).iloc[j]
+
+
+            #bb = d.get_bollinger_bands(stock_table.iloc[:i],window).iloc[j]
 
             # find yesterday's final bollinger band quantile
             if bb != float('inf'):
                 bbq = np.argwhere(np.where(BB_quantiles>bb,1,0))[0][0]
             else:
                 bbq = len(BB_quantiles) - 1
+
 
             # find current SMA value
             sma = d.get_adj_close_sma_ratio(stock_table.iloc[:i],window).iloc[j]
@@ -506,7 +601,7 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
                 mrq = len(MRDR_quantiles) - 1
 
             # find state based on these two pieces of information
-            state = str(bbq) + str(smq) + str(mrq)
+            state =  str(smq) + str(bbq) + str(mrq)
 
             # locate *optimal* action from Q table, which we will then examine to see if it's possible
 #             print("STATE: ", state, str(bbq), str(smq))
@@ -532,7 +627,7 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
 
         # if you can't buy or sell, hold
         if cur_shares < inc and cur_cash < (cur_price*inc):
-            cur_act = 'HOLD'
+            act = 'HOLD'
 
         # if you can't sell, but you can buy... buy if it makes sense, or hold if it doesn't
         elif cur_shares < inc:
@@ -572,12 +667,12 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
     return results
 
 # function to return stats and graphs
-def return_stats(stock='jpm',
+def return_stats(stock='aapl',
                  commission = 2,
                  money=100000,
                  #inc=10,- can read this argument and change code below if doing absolute share-based
                  #original_shares=100, - can read this argument and change code below if doing absolute share-based
-                 policies=[hold,random_action,rule_based,ols,qlearner]):
+                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner]):
 
     '''
     Enacts every strategy and provides summary statistics and graphs
@@ -628,7 +723,7 @@ def return_stats(stock='jpm',
             quantile_length = len(results[policy.__name__]['BB_quantiles'])
             qtab = results[policy.__name__]['qtable']
             
-            qtab_bb = weighted_average_and_normalize(qtab, state_history, 0, quantile_length)
+            qtab_bb = weighted_average_and_normalize(qtab, state_history, 1, quantile_length)
             qtab_bb = qtab_bb.iloc[::-1] # reverse order of rows for visualization purposes - now biggest value will be on top
             qtab_bb.index = np.round(np.flip(np.array(results[policy.__name__]['BB_quantiles'])),5) # define index as bb quantiles, reversing quantile order in kind so biggest value is first
 
@@ -646,7 +741,7 @@ def return_stats(stock='jpm',
 
             # marginalize over SMA
             # TODO - determine if this mean was taken correctly
-            qtab_sma = weighted_average_and_normalize(qtab, state_history, 1, quantile_length)
+            qtab_sma = weighted_average_and_normalize(qtab, state_history, 0, quantile_length)
             qtab_sma = qtab_sma.iloc[::-1]
             qtab_sma.index = np.round(np.flip(np.array(results[policy.__name__]['SMA_quantiles'])),5)
 
