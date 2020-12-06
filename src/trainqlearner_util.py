@@ -166,11 +166,18 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
     actions_history(dict): has everydays' actions and close price
     returns_since_entry(list): contains every day's return since entry
     '''
+    # create framework for episode-to-episode Q table change tracking; will track MSE between episodes
+    episode = 0
+    q_cur = q.copy()
+    errs = []
+    episode_decile = episodes//10
+
     # actions_history = []
     # num_shares = 0
     # bought_history = []
     # returns_since_entry = [0]
     # cash = 100000
+    cash_states_values, shares_states_values = d.create_cash_and_holdings_quantiles()
     alpha = 0.1
     for ii in range(episodes):
         actions_history = []
@@ -186,12 +193,10 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
                 next_adj_close, next_state = train_data[i+1]
             except:
                 break
-
-
-            current_cash_state = value_to_state(cash, cash_states_values)
-            current_share_state = value_to_state(num_shares, shares_states_values)
+            
+            current_cash_state = d.value_to_state(cash, cash_states_values)
+            current_share_state = d.value_to_state(num_shares, shares_states_values)
             state = state + current_cash_state + current_share_state
-
 
             if i >=1:
               epsilon*= 0.9958
@@ -230,8 +235,8 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
 
             #next_cash_state = value_to_state(next_cash,cash_states_values)
             ## Use 'cash' instead as affect 'current'
-            next_cash_state = value_to_state(cash,cash_states_values)
-            next_share_state = value_to_state(num_shares, shares_states_values)
+            next_cash_state = d.value_to_state(cash,cash_states_values)
+            next_share_state = d.value_to_state(num_shares, shares_states_values)
             ## Note: cash and num_share are automatically updated in at the end of the Action code block
             next_state = next_state + next_cash_state + next_share_state
 
@@ -240,11 +245,13 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
             # update q table
             q.loc[state, action] = (1.-alpha)*q.loc[state, action] + alpha*(reward+gamma*(q.loc[next_state].max()))
 
+            print("ARRIVED AT PORTFOLIO VAL")
             current_portfolio_value.append(cash + num_shares*next_adj_close)
 
             # ---- (tentative) start of q-table info plotting/output -----
-            q_last_1 = q_cur_1.copy()
             q_cur_1 = q.copy()
+            q_last_1 = q_cur_1.copy()
+            
             
             # add convergence tracking for episode 1
             if episode == 1:
@@ -262,8 +269,9 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
             plt.show()
             
         # calculate MSE between epsiodes
-        q_last = q_cur.copy()
         q_cur = q.copy()
+        q_last = q_cur.copy()
+        
             
         # update MSE tracking
         MSE = np.sum(np.square(q_cur - q_last).values)
@@ -480,7 +488,8 @@ def train_q_learning(train_data, q, gamma, episodes,sh):
 #     return q, actions_history, returns_since_entry
 
 #def trainqlearner(start_date, end_date, ticker,alpha=0.01, epsilon=0.2, epsilon_decay = .99995, gamma=0.95, episodes=500,commission=0,sell_penalty=0):
-def trainqlearner(train_data, q, gamma=0.95, episodes=200, sh = 50)
+#def trainqlearner(train_data,start_date, end_date, ticker, q, gamma=0.95, episodes=200, sh = 50):
+def trainqlearner(start_date, end_date, ticker, gamma=0.95, episodes=200, sh = 50):
     # Split the data into train and test data set
     train_df = d.get_stock_data(ticker, start_date, end_date)
 
@@ -488,7 +497,9 @@ def trainqlearner(train_data, q, gamma=0.95, episodes=200, sh = 50)
     all_actions = {0: 'hold', 1: 'buy', 2: 'sell'}
 
     # create_df = normalized predictors norm_bb_width, norm_adj_close, norm_close_sma_ratio
+    print("START create_df")
     train_df = d.create_df(train_df, 3)
+    print("END create_df")
 
     # get_states = States Dictionary after discretizing by converting continuous values to integer state
     percent_b_states_values, close_sma_ratio_states_value = d.get_states(
@@ -499,17 +510,26 @@ def trainqlearner(train_data, q, gamma=0.95, episodes=200, sh = 50)
         train_df, percent_b_states_values, close_sma_ratio_states_value)
     #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
 
+    # New
+    cash_states_values, shares_states_values = d.create_cash_and_holdings_quantiles()
+
     # Return a list of strings representing the combination of all the states
-    all_states = get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values)
+    all_states = d.get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values)
     # all_states = d.get_all_states(None, percent_b_states_values, close_sma_ratio_states_value)
     states_size = len(all_states)
 
     # Preparation of the Q Table
+    print("START q_init")
     q_init = initialize_q_mat(all_states, all_actions)/1e9
+    print("END q_init")
+    print(q_init)
     
     train_data = np.array(train_df[['norm_adj_close', 'state']])
     
-    q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q, gamma=0.95, episodes=200, sh = 50)
+    print("START train_q_learning")
+    q, train_actions_history, train_returns_since_entry = train_q_learning(train_data, q_init, gamma=0.95, episodes=1, sh = 50)
+    print("END train_q_learning")
+    
     # Specify quantiles
     BB_quantiles = percent_b_states_values
     SMA_ratio_quantiles = close_sma_ratio_states_value

@@ -168,7 +168,7 @@ def create_cash_and_holdings_quantiles():
 
     cash_states_values = {}
     for i in range(len(cash_list)):
-    cash_states_values[i] = cash_list[i]
+        cash_states_values[i] = cash_list[i]
     cash_states_values[9] = float("inf")
 
     # HOLDINGS = Num Shares (State 4)
@@ -177,7 +177,7 @@ def create_cash_and_holdings_quantiles():
 
     shares_states_values = {}
     for i in range(len(shares_list)):
-    shares_states_values[i] = shares_list[i]
+        shares_states_values[i] = shares_list[i]
     shares_states_values[9] = float("inf")
 
     return cash_states_values, shares_states_values
@@ -271,6 +271,8 @@ def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
     Output:
     df(dataframe)
     '''
+    percent_b_states_values, close_sma_ratio_states_value = get_states(df)
+
     #df['norm_bb_width_state'] = df['norm_bb_width'].apply(lambda x : value_to_state(x, bb_states_value)) #2 
     df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(lambda x : value_to_state(x, close_sma_ratio_states_value))
     df['percent_b_state'] = df['percent_b'].apply(lambda x : value_to_state(x, percent_b_states_values))

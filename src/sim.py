@@ -23,14 +23,12 @@ end = '2019-12-31'
 start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
 
-q, bb_states_value, SMA_ratio_quantiles, MRDR_values = tu.trainqlearner(start_date, end_date, ticker)
+print("START")
+q, bb_states_value, SMA_ratio_quantiles, cash_quantiles, holdings_quantiles = tu.trainqlearner(start_date, end_date, ticker)
+print("END")
 q.columns = ['HOLD', 'BUY', 'SELL']
 bb_ = list(bb_states_value.values())
-
-print(bb_)
-
 sma_ = list(SMA_ratio_quantiles.values())
-mrdr_ = list(MRDR_values.values())
 
 # Fixing the range problem
 
@@ -500,7 +498,7 @@ def ols(stock_table,money,inc, original_shares,commission):
     return results
 
 # def qlearner(stock_table,money,inc, original_shares,qtable=ql[0], BB_quantiles=ql[1], SMA_quantiles=ql[2],window=window):
-def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, MRDR_quantiles=mrdr_, window=5): # defining defaults here prevents need for args to be passed in return_stats function
+def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_quantiles= bb_ , SMA_quantiles = sma_, window=5): # defining defaults here prevents need for args to be passed in return_stats function
     '''
     Enacts qlearning
 
@@ -592,16 +590,17 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
                 smq = len(SMA_quantiles) - 1
                 
             # find current SMA value
-            mra = d.get_mrdr(stock_table.iloc[:i],baseline).iloc[-1]
+            #mra = d.get_mrdr(stock_table.iloc[:i],baseline).iloc[-1]
 
             # find current SMA quantile
-            if mra != float('inf'):
-                mrq = np.argwhere(np.where(MRDR_quantiles>mra,1,0))[0][0]
-            else:
-                mrq = len(MRDR_quantiles) - 1
+            # if mra != float('inf'):
+            #     mrq = np.argwhere(np.where(MRDR_quantiles>mra,1,0))[0][0]
+            # else:
+            #     mrq = len(MRDR_quantiles) - 1
 
             # find state based on these two pieces of information
-            state =  str(smq) + str(bbq) + str(mrq)
+            #state =  str(smq) + str(bbq) + str(mrq)
+            state =  str(smq) + str(bbq)
 
             # locate *optimal* action from Q table, which we will then examine to see if it's possible
 #             print("STATE: ", state, str(bbq), str(smq))
@@ -663,7 +662,7 @@ def qlearner(stock_table,money,inc, original_shares, commission,qtable=nq, BB_qu
     
     actions = pd.Series(actions,index=stock_table.index)
 
-    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history),'BB_quantiles':BB_quantiles,'SMA_quantiles':SMA_quantiles,'MRDR_quantiles':MRDR_quantiles, 'markov':markov}
+    results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':qtable, 'state_history':pd.Series(state_history),'BB_quantiles':BB_quantiles,'SMA_quantiles':SMA_quantiles, 'markov':markov}
     return results
 
 # function to return stats and graphs
@@ -757,19 +756,19 @@ def return_stats(stock='aapl',
             
             # marginalize over MRDR
             # TODO - determine if this mean was taken correctly
-            qtab_mrdr = weighted_average_and_normalize(qtab, state_history, 2, quantile_length)
-            qtab_mrdr = qtab_mrdr.iloc[::-1]
-            qtab_mrdr.index = np.round(np.flip(np.array(results[policy.__name__]['MRDR_quantiles'])),5)
+            # qtab_mrdr = weighted_average_and_normalize(qtab, state_history, 2, quantile_length)
+            # qtab_mrdr = qtab_mrdr.iloc[::-1]
+            # qtab_mrdr.index = np.round(np.flip(np.array(results[policy.__name__]['MRDR_quantiles'])),5)
             
-            plt.figure(figsize=(9,7))
-            fig = heatmap(qtab_mrdr,cmap='Blues')
-            plt.title('Market Relative Daily Return Q-Table',size=16)
-            plt.gca().hlines([i+1 for i in range(len(qtab_mrdr.index))],xmin=0,xmax=10,linewidth=10,color='white')
-            plt.xticks(fontsize=15)
-            plt.yticks(fontsize=14,rotation=0)
-            plt.gca().tick_params(axis='x',bottom=False,left=False)
-            plt.gca().tick_params(axis='y',bottom=False,left=False)
-            plt.show(fig)
+            # plt.figure(figsize=(9,7))
+            # fig = heatmap(qtab_mrdr,cmap='Blues')
+            # plt.title('Market Relative Daily Return Q-Table',size=16)
+            # plt.gca().hlines([i+1 for i in range(len(qtab_mrdr.index))],xmin=0,xmax=10,linewidth=10,color='white')
+            # plt.xticks(fontsize=15)
+            # plt.yticks(fontsize=14,rotation=0)
+            # plt.gca().tick_params(axis='x',bottom=False,left=False)
+            # plt.gca().tick_params(axis='y',bottom=False,left=False)
+            # plt.show(fig)
             
 
     # get markov transition models
@@ -829,7 +828,7 @@ def return_stats(stock='aapl',
         try:
             del dic['BB_quantiles']
             del dic['SMA_quantiles']
-            del dic['MRDR_quantiles']
+            # del dic['MRDR_quantiles']
         except:
             pass
         df = pd.DataFrame(dic)
