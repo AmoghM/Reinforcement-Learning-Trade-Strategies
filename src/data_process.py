@@ -111,23 +111,6 @@ def get_stock_data(symbol, start, end):
     return df
 
 
-def get_bollinger_bands(values, window):
-    '''
-    Return upper and lower Bollinger Bands.
-    INPUTS:
-    values(pandas series)
-    window(int): time period to consider
-    OUTPUS:
-    band_width(pandas series)
-    '''
-    #  rolling mean
-    rm = values.rolling(window=window).mean()
-    rstd = values.rolling(window=window).std()
-
-    band_width = rm / rstd
-    return band_width.apply(lambda x: round(x, 5))
-
-
 def get_adj_close_sma_ratio(values, window):
     '''
     Return the ratio of adjusted closing value to the simple moving average.
@@ -142,7 +125,7 @@ def get_adj_close_sma_ratio(values, window):
     return ratio.apply(lambda x: round(x, 5))
 
 
-def discretize(values, num_states=4):
+def discretize(values, num_states=9):
     '''
     Convert continuous values to integer state
     Inputs:
@@ -200,7 +183,7 @@ def value_to_state(value, states_value):
         return 'value out of range'
 
 
-def create_df(df, window=45):
+def create_df(df, window=5):
     '''
     Create a dataframe with the normalized predictors
     norm_bb_width, norm_adj_close, norm_close_sma_ratio
@@ -260,7 +243,7 @@ def get_states(df):
     return percent_b_states_values, close_sma_ratio_states_value
 
 
-def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
+def create_state_df(df, percent_b_states_values, close_sma_ratio_states_value):
     '''
     Add a new column to hold the state information to the dataframe
     Inputs:
@@ -271,8 +254,6 @@ def create_state_df(df, bb_states_value, close_sma_ratio_states_value):
     Output:
     df(dataframe)
     '''
-    percent_b_states_values, close_sma_ratio_states_value = get_states(df)
-
     #df['norm_bb_width_state'] = df['norm_bb_width'].apply(lambda x : value_to_state(x, bb_states_value)) #2 
     df['norm_close_sma_ratio_state'] = df['norm_close_sma_ratio'].apply(lambda x : value_to_state(x, close_sma_ratio_states_value))
     df['percent_b_state'] = df['percent_b'].apply(lambda x : value_to_state(x, percent_b_states_values))
@@ -297,17 +278,47 @@ def get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_s
     states = []
     for c, _ in close_sma_ratio_states_value.items():
         for b, _ in percent_b_states_values.items():
-          for m, _ in cash_states_values.items():
-            for s, _ in shares_states_values.items(): 
-              state =  str(c) + str(b) + str(m) + str(s)
-              states.append(str(state))
-    
+            for m, _ in cash_states_values.items():
+                for s, _ in shares_states_values.items():
+                    state = str(c) + str(b) + str(m) + str(s)
+                    states.append(str(state))
+
     return states
+
+# def weighted_average_and_normalize(qtable,state_history,state_num,quantile_length):
+#     '''
+#     takes a q table and does a weighted average group by given the input state_number (what digit number it is in the state)
+#
+#     Inputs:
+#     qtable: the qtable (DataFrame)
+#     state_history: the state history (Series)
+#     state_num: the number digit that indicates the state
+#     quantile_length: the number of quantiles we built this out with
+#     '''
+#     qtab_2 = pd.merge(qtable,pd.Series(state_history,name='state_history'),'inner',left_index=True,right_index=True)
+#
+#     sh = qtab_2['state_history']
+#     qtab_2 = qtab_2.drop(columns=['state_history']).multiply(qtab_2['state_history'],axis=0)
+#
+#     qtab_2 = pd.merge(qtab_2,sh,'inner',left_index=True,right_index=True)
+#
+#     qtab_2['state'] = qtab_2.index.str.slice(state_num,state_num+1)
+#
+#     qtab_3 = qtab_2.groupby('state').sum()
+#
+#     qtab_4 = qtab_3.divide(qtab_3['state_history'],axis=0).drop(columns='state_history')
+#
+#     qtab_5 = qtab_4.reindex([str(i) for i in range(quantile_length)])
+#
+#     #normalize by max
+#     qtab_6 = qtab_5.divide(qtab_5.max(axis=1),axis=0)
+#
+#     return qtab_6
 
 def weighted_average_and_normalize(qtable,state_history,state_num,quantile_length):
     '''
     takes a q table and does a weighted average group by given the input state_number (what digit number it is in the state)
-    
+
     Inputs:
     qtable: the qtable (DataFrame)
     state_history: the state history (Series)
@@ -315,24 +326,26 @@ def weighted_average_and_normalize(qtable,state_history,state_num,quantile_lengt
     quantile_length: the number of quantiles we built this out with
     '''
     qtab_2 = pd.merge(qtable,pd.Series(state_history,name='state_history'),'inner',left_index=True,right_index=True)
-    
+
+    # reverse normalization: qtab_2['state_history'] = 1/qtab_2['state_history']
+
     sh = qtab_2['state_history']
     qtab_2 = qtab_2.drop(columns=['state_history']).multiply(qtab_2['state_history'],axis=0)
-    
+
     qtab_2 = pd.merge(qtab_2,sh,'inner',left_index=True,right_index=True)
-    
+
     qtab_2['state'] = qtab_2.index.str.slice(state_num,state_num+1)
-    
-    qtab_3 = qtab_2.groupby('state').sum()
-    
-    qtab_4 = qtab_3.divide(qtab_3['state_history'],axis=0).drop(columns='state_history')
-    
+
+
+    qtab_3 = qtab_2.groupby('state').sum().drop(columns='state_history')
+
+
+    qtab_4 = qtab_3.divide(qtab_3.abs().sum(axis=1),axis=0)
+
+
     qtab_5 = qtab_4.reindex([str(i) for i in range(quantile_length)])
-    
-    #normalize by max
-    qtab_6 = qtab_5.divide(qtab_5.max(axis=1),axis=0)
-    
-    return qtab_6
+
+    return qtab_5
     
     
                                            
