@@ -295,14 +295,14 @@ def trainqlearner(ticker, start_date, end_date, window, gamma, episodes, sh):
     percent_b_states_values, close_sma_ratio_states_value = d.get_states(
         train_df)
 
+    #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
 
+    cash_states_values, shares_states_values = d.create_cash_and_holdings_quantiles()
     # Create_state_df =  Add state information to the DF
     train_df = d.create_state_df(
         train_df, percent_b_states_values, close_sma_ratio_states_value)
 
-    #train_df = d.create_state_df(train_df, None, percent_b_states_values, close_sma_ratio_states_value)
-
-    cash_states_values, shares_states_values = d.create_cash_and_holdings_quantiles()
+    train_df.to_csv("../data/train_dqn_data.csv")
 
     # Return a list of strings representing the combination of all the states
     all_states = d.get_all_states(percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values)

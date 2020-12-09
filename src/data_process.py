@@ -108,6 +108,7 @@ def get_stock_data(symbol, start, end):
     df = pd.read_csv('train.csv',index_col='Date')
     df.index=pd.to_datetime(df.index)
     '''
+    # df.to_csv("../data/current.csv")
     return df
 
 

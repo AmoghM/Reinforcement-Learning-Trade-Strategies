@@ -13,12 +13,23 @@ import trainqlearner_util as tu
 import time
 import pandas_datareader.data as web # fetch stock data
 
+import sys
+# sys.path.insert(1, "C:/Users/amogh/Appledore/Fall-2020/Capstone/q-trading-pytorch/")
+from evaluate import DQN
+
+
 #TODO: make this a single function call
 ticker = 'JPM'
 
 np.random.seed(1000)
 start = '2017-01-01'
 end = '2019-12-31'
+
+dqn_data = d.get_stock_data(ticker,start,end)
+dqn_data.to_csv("../data/test_dqn_data.csv")
+
+dqn_result = DQN()
+
 
 start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
@@ -294,7 +305,6 @@ def rule_based(stock_table,money,inc, original_shares,commission):
 
     # normalize markov
     markov = markov.divide(markov.sum(axis=1),axis=0).round(2)
-
     results = {'final_vals':final_vals,'actions':actions,'shares':shares,'cash':cash,'qtable':None, 'markov':markov, 'state_history': None}
     return results
 
@@ -586,7 +596,7 @@ def qlearner(stock_table,money,inc, original_shares, commission, q_table = nq, t
     temp['shares'] = curr_shares
     temp['shares_state'] = curr_shares_s
     temp['state'] = final_states
-    temp.to_csv('./data/viz_data.csv')
+    temp.to_csv('../data/viz_data.csv')
 
 
     actions = pd.Series(act_list, index=stock_table.index)
@@ -608,7 +618,7 @@ def return_stats(stock='jpm',
                  money=100000,
                  #inc=10,- can read this argument and change code below if doing absolute share-based
                  #original_shares=100, - can read this argument and change code below if doing absolute share-based
-                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner]):
+                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner,enact_dqn]):
 
     '''
     Enacts every strategy and provides summary statistics and graphs
@@ -655,6 +665,9 @@ def return_stats(stock='jpm',
                                       original_shares = original_shares,
                                      commission = commission) for policy in policies}
 
+
+    # results['DQN'] = dqn_result
+
     actions_history = results['qlearner']['actions_history']
 
     days, prices, actions = [], [], []
@@ -683,15 +696,9 @@ def return_stats(stock='jpm',
     holds.to_csv('./data/hold_data.csv')
 
 
-
-
-
-
-
-
     # plot qtables only for qlearner (or any other strategies with Q table)
-    for policy in policies:
-        if results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
+    for policy in policies[:-1]:
+        if 'qtable' in results[policy.__name__] and results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
 
             # get state history and quantile length and qtable for normalization and averaging function
             state_history = results[policy.__name__]['state_history']
@@ -714,7 +721,7 @@ def return_stats(stock='jpm',
             plt.gca().tick_params(axis='y',bottom=False,left=False)
             plt.show(fig)
 
-            # marginalize over SMA
+            # marginalize   over SMA
             # TODO - determine if this mean was taken correctly
             quantile_length = len(results[policy.__name__]['SMA_quantiles'])
             qtab_sma = weighted_average_and_normalize(qtab, state_history, 0, quantile_length)
@@ -766,24 +773,26 @@ def return_stats(stock='jpm',
 
 
     # get markov transition models
-    for policy in policies:
-        plt.figure(figsize=(6,3))
-        plt.title('Transition Matrix For '+policy.__name__,size=16)
-        mkv = results[policy.__name__]['markov']
-        fig = heatmap(mkv,annot=True,annot_kws={'size':14},cmap='Greens',cbar=False)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14,rotation=0)
-        plt.gca().set(xlabel='Current Trading Day', ylabel='Last Trading Day')
-        plt.gca().tick_params(axis='x',bottom=False,left=False)
-        plt.gca().tick_params(axis='y',bottom=False,left=False)
-        plt.gca().hlines([1,2],xmin=0,xmax=10,linewidth=10,color='white')
-        plt.show(fig)
+    for policy in policies[:-1]:
+        if 'markov' in results[policy.__name__]:
+            plt.figure(figsize=(6,3))
+            plt.title('Transition Matrix For '+policy.__name__,size=16)
+            mkv = results[policy.__name__]['markov']
+            fig = heatmap(mkv,annot=True,annot_kws={'size':14},cmap='Greens',cbar=False)
+            plt.xticks(fontsize=14)
+            plt.yticks(fontsize=14,rotation=0)
+            plt.gca().set(xlabel='Current Trading Day', ylabel='Last Trading Day')
+            plt.gca().tick_params(axis='x',bottom=False,left=False)
+            plt.gca().tick_params(axis='y',bottom=False,left=False)
+            plt.gca().hlines([1,2],xmin=0,xmax=10,linewidth=10,color='white')
+            plt.show(fig)
 
 
     # plot daily portfolio values
     plt.figure(figsize=(14,8))
-    for policy in policies:
+    for policy in policies[-1:]:
         plt.plot(results[policy.__name__]['final_vals'],label = policy.__name__)
+    # plt.plot(results['DQN']['final_vals'], label = 'DQN')
     plt.legend()
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Portfolio Value ($)",fontsize=20)
@@ -793,7 +802,10 @@ def return_stats(stock='jpm',
     # plot daily cash values
     plt.figure(figsize=(14,8))
     for policy in policies:
+        print(results[policy.__name__]['cash'])
         plt.plot(results[policy.__name__]['cash'],label = policy.__name__)
+
+    # plt.plot(results['DQN']['cash'], label='DQN')
     plt.legend()
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Cash Held ($)",fontsize=20)
@@ -803,7 +815,10 @@ def return_stats(stock='jpm',
     # plot daily shares
     plt.figure(figsize=(14,8))
     for policy in policies:
+        # print(results[policy.__name__]['shares'])
         plt.plot(results[policy.__name__]['shares'],label = policy.__name__)
+
+    # plt.plot(results['DQN']['shares'], label='DQN')
     plt.legend()
     plt.xlabel("Date",fontsize=20)
     plt.ylabel("Shares Held",fontsize=20)
@@ -811,15 +826,16 @@ def return_stats(stock='jpm',
     plt.show()
 
     # plot daily portfolio values
-    for i, policy in enumerate(policies):
+    for i, policy in enumerate(policies[-1:]):
         dic = results[policy.__name__]
-        if dic['state_history'] is not None:
+        if 'state_history' in dic and dic['state_history'] is not None:
             print("States History for " + policy.__name__ + "is: ", dic['state_history'])
 
-        del dic['state_history']
-        del dic['qtable']
-        del dic['markov']
+
         try:
+            del dic['state_history']
+            del dic['qtable']
+            del dic['markov']
             del dic['BB_quantiles']
             del dic['SMA_quantiles']
             del dic['CASH_quantiles']
@@ -844,6 +860,7 @@ def return_stats(stock='jpm',
         plt.title("Daily Portfolio Values For Trading Strategies of "+ policy.__name__ +" for stock : "+stock.upper(),fontsize=25)
         plt.legend()
         plt.show()
+
 
     # display percentages
     #TODO: display(res) has no display() function. Fix bug.
@@ -895,6 +912,7 @@ def return_stats(stock='jpm',
         print('Standard deviation of daily return under',nm,'for',stock_name+':',round(np.std(rets[policy],axis=0),3))
 
         # information ratio of daily return
+        print(len(rets[policy].values), len(bls))
         checkhist(rets[policy].values,bls)
         pr = np.mean(rets[policy].values)
         br = np.mean(bls)
@@ -966,8 +984,10 @@ def return_stats(stock='jpm',
                 print('\n')
             print('\n')
 
-    # TODO: add any additional desired visualizations
+    # TODO: add any additional desired visualizati  ons
+    # plt.show()
     plt.show()
+
 
 if __name__ == '__main__':
 
