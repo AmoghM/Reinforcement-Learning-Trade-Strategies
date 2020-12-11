@@ -54,8 +54,8 @@ def DQN(stock_table=None, money= None, inc= None, original_shares= None, commiss
 
 		# capital = 100000
 		for t in range(l):
-			#action = agent.act(state)
-			action = np.random.randint(0, 3)
+			action = agent.act(state)
+			# action = np.random.randint(0, 3)
 			closes.append(data[t])
 
 			# sit

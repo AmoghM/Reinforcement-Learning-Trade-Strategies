@@ -618,7 +618,7 @@ def return_stats(stock='jpm',
                  money=100000,
                  #inc=10,- can read this argument and change code below if doing absolute share-based
                  #original_shares=100, - can read this argument and change code below if doing absolute share-based
-                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner,enact_dqn]):
+                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner,DQN]):
 
     '''
     Enacts every strategy and provides summary statistics and graphs
@@ -790,7 +790,7 @@ def return_stats(stock='jpm',
 
     # plot daily portfolio values
     plt.figure(figsize=(14,8))
-    for policy in policies[-1:]:
+    for policy in policies:
         plt.plot(results[policy.__name__]['final_vals'],label = policy.__name__)
     # plt.plot(results['DQN']['final_vals'], label = 'DQN')
     plt.legend()
