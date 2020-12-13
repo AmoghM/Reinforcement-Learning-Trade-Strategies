@@ -1,6 +1,6 @@
-from agent.agent import Agent
-from agent.memory import Transition, ReplayMemory
-from functions import *
+from dqn.agent.agent import Agent
+from dqn.agent.memory import Transition, ReplayMemory
+from dqn.functions import *
 import sys
 import torch
 

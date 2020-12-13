@@ -1,5 +1,5 @@
-from agent.memory import Transition, ReplayMemory
-from agent.model import DQN
+from dqn.agent.memory import Transition, ReplayMemory
+from dqn.agent.model import DQN
 
 import numpy as np
 import random

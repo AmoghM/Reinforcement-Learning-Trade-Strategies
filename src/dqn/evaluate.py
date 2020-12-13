@@ -5,8 +5,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from agent.agent import Agent
-from functions import *
+from dqn.agent.agent import Agent
+from dqn.functions import *
 import pandas as pd
 
 # stock_name = '^HSI_2018'
@@ -26,7 +26,7 @@ def DQN(stock_table=None, money= None, inc= None, original_shares= None, commiss
 	cash, num_shares = 100_000, 0
 	sh = 50
 	agent = Agent(window_size)
-	data, adj_close, date = getStockDataVec(path = "../data/test_dqn_data.csv")
+	data, adj_close, date = getStockDataVec(path = "data/test_dqn_data.csv")
 	l = len(adj_close) - 1
 	batch_size = 32
 	episode_count = 5

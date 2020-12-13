@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 import numpy as np
 import datetime as dt
@@ -12,6 +13,7 @@ from data_process import histerror, checkhist, read_stock, returns, weighted_ave
 import trainqlearner_util as tu
 import time
 import pandas_datareader.data as web # fetch stock data
+from dqn.evaluate import DQN
 
 #TODO: make this a single function call
 ticker = 'JPM'
@@ -20,11 +22,15 @@ np.random.seed(1000)
 start = '2017-01-01'
 end = '2019-12-31'
 
+dqn_data = d.get_stock_data(ticker,start,end)
+dqn_data.to_csv("data/test_dqn_data.csv")
+dqn_result = DQN()
+
 start_date = dt.datetime(2007, 1, 1)
 end_date = dt.datetime(2016, 12, 31)
 
 
-q, train_actions_history, train_returns_since_entry, percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values = tu.trainqlearner(ticker, start_date, end_date, window = 5, gamma = 0.95, episodes = 500, sh = 30, alp = 0.1, epsi = 0.99)
+q, train_actions_history, train_returns_since_entry, percent_b_states_values, close_sma_ratio_states_value, cash_states_values, shares_states_values = tu.trainqlearner(ticker, start_date, end_date, window = 5, gamma = 0.95, episodes = 10, sh = 30, alp = 0.1, epsi = 0.99)
 
 q.columns = ['HOLD', 'BUY', 'SELL']
 nq=q
@@ -628,7 +634,7 @@ def return_stats(stock='jpm',
                  money=100000,
                  #inc=10,- can read this argument and change code below if doing absolute share-based
                  #original_shares=100, - can read this argument and change code below if doing absolute share-based
-                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner]):
+                 policies=[hold,random_action,rule_based,ols,buy_always,qlearner,DQN]):
 
     '''
     Enacts every strategy and provides summary statistics and graphs
@@ -712,8 +718,8 @@ def return_stats(stock='jpm',
 
 
     # plot qtables only for qlearner (or any other strategies with Q table)
-    for policy in policies:
-        if results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
+    for policy in policies[:-1]:
+        if 'qtable' in results[policy.__name__] and results[policy.__name__]['qtable'] is not None: #don't try to plot Q tables for benchmark strategies
 
             # get state history and quantile length and qtable for normalization and averaging function
             state_history = results[policy.__name__]['state_history']
@@ -788,18 +794,19 @@ def return_stats(stock='jpm',
 
 
     # get markov transition models
-    for policy in policies:
-        plt.figure(figsize=(6,3))
-        plt.title('Transition Matrix For '+policy.__name__,size=16)
-        mkv = results[policy.__name__]['markov']
-        fig = heatmap(mkv,annot=True,annot_kws={'size':14},cmap='Greens',cbar=False)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14,rotation=0)
-        plt.gca().set(xlabel='Current Trading Day', ylabel='Last Trading Day')
-        plt.gca().tick_params(axis='x',bottom=False,left=False)
-        plt.gca().tick_params(axis='y',bottom=False,left=False)
-        plt.gca().hlines([1,2],xmin=0,xmax=10,linewidth=10,color='white')
-        plt.show(fig)
+    for policy in policies[:-1]:
+        if 'markov' in results[policy.__name__]:
+            plt.figure(figsize=(6,3))
+            plt.title('Transition Matrix For '+policy.__name__,size=16)
+            mkv = results[policy.__name__]['markov']
+            fig = heatmap(mkv,annot=True,annot_kws={'size':14},cmap='Greens',cbar=False)
+            plt.xticks(fontsize=14)
+            plt.yticks(fontsize=14,rotation=0)
+            plt.gca().set(xlabel='Current Trading Day', ylabel='Last Trading Day')
+            plt.gca().tick_params(axis='x',bottom=False,left=False)
+            plt.gca().tick_params(axis='y',bottom=False,left=False)
+            plt.gca().hlines([1,2],xmin=0,xmax=10,linewidth=10,color='white')
+            plt.show(fig)
 
 
     # plot daily portfolio values
@@ -835,13 +842,13 @@ def return_stats(stock='jpm',
     # plot daily portfolio values
     for i, policy in enumerate(policies):
         dic = results[policy.__name__]
-        if dic['state_history'] is not None:
+        if 'state_history' in dic and dic['state_history'] is not None:
             print("States History for " + policy.__name__ + "is: ", dic['state_history'])
 
-        del dic['state_history']
-        del dic['qtable']
-        del dic['markov']
         try:
+            del dic['state_history']
+            del dic['qtable']
+            del dic['markov']
             del dic['BB_quantiles']
             del dic['SMA_quantiles']
             del dic['CASH_quantiles']

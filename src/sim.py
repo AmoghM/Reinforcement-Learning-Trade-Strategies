@@ -15,7 +15,7 @@ import pandas_datareader.data as web # fetch stock data
 
 import sys
 # sys.path.insert(1, "C:/Users/amogh/Appledore/Fall-2020/Capstone/q-trading-pytorch/")
-from evaluate import DQN
+from dqn.evaluate import DQN
 
 
 #TODO: make this a single function call
@@ -26,7 +26,7 @@ start = '2017-01-01'
 end = '2019-12-31'
 
 dqn_data = d.get_stock_data(ticker,start,end)
-dqn_data.to_csv("../data/test_dqn_data.csv")
+dqn_data.to_csv("data/test_dqn_data.csv")
 
 dqn_result = DQN()
 
